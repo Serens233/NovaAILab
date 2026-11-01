@@ -5,7 +5,7 @@ import asyncio
 import pytest
 from pydantic import ValidationError
 
-from nova.chat.registry import QWEN38_MODEL, ModelRegistry, experimental_policy
+from nova.chat.registry import QWEN38_MODEL, ModelRegistry, _qwen38_alias, experimental_policy
 from nova.config import ConfigurationError, Settings, load_settings
 from nova.errors import ApplicationError
 from nova.gpu import resources
@@ -13,6 +13,7 @@ from nova.gpu.backend import BackendError
 
 CANONICAL = "qwen3.8:27b"
 OTHER_QUANT = "hf.co/unsloth/Qwen3.8-27B-GGUF:Q4_K_M"
+LOCAL_QUANT = "qwen3.8:27b-q3_k_xl"
 
 
 class ReadOnlyCatalog:
@@ -57,7 +58,7 @@ def test_preferred_actual_name_does_not_replace_stable_default(enough_memory):
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("actual", [QWEN38_MODEL, OTHER_QUANT, "QWEN3.8:27B"])
+@pytest.mark.parametrize("actual", [QWEN38_MODEL, OTHER_QUANT, LOCAL_QUANT, "QWEN3.8:27B"])
 def test_canonical_resolves_only_to_installed_real_identifier(enough_memory, actual):
     async def scenario():
         registry, _ = router([actual], qwen38_enabled=True)
@@ -80,6 +81,90 @@ def test_configured_hf_identifier_resolves_to_installed_canonical(enough_memory)
     asyncio.run(scenario())
 
 
+def test_local_quant_tag_is_listed_as_experimental_not_discovered(enough_memory):
+    async def scenario():
+        registry, _ = router([LOCAL_QUANT, "qwen3.5:9b"], qwen38_enabled=True)
+        listed = await registry.list()
+        entry = next(model for model in listed["models"] if model["id"] == LOCAL_QUANT)
+        assert entry["installed"] is True
+        assert entry["available"] is True
+        assert entry["experimental"] is True
+        assert listed["preferred_model"] == LOCAL_QUANT
+        assert LOCAL_QUANT not in {model["id"] for model in listed["discovered_models"]}
+        direct = await registry.resolve(LOCAL_QUANT)
+        assert direct["id"] == LOCAL_QUANT
+        assert direct["requested_model"] == LOCAL_QUANT
+        assert direct["policy"]["model"] == LOCAL_QUANT
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("actual", [LOCAL_QUANT, CANONICAL, QWEN38_MODEL])
+def test_experiment_gate_rejects_before_any_catalog_query(monkeypatch, actual):
+    """开关和RAM不足都不能先查tags或接触常驻模型；错误码保持原有契约。"""
+    monkeypatch.setattr(
+        resources,
+        "get_system_memory",
+        lambda: {"available": True, "total_mib": 15477, "available_mib": 9000},
+    )
+
+    async def scenario():
+        registry, backend = router([actual], qwen38_enabled=True)
+        with pytest.raises(ApplicationError) as caught:
+            await registry.resolve(actual)
+        assert caught.value.code == "MODEL_RAM_INSUFFICIENT"
+        assert backend.queries == 0
+
+        registry, backend = router([actual])
+        with pytest.raises(ApplicationError) as caught:
+            await registry.resolve(actual)
+        assert caught.value.code == "MODEL_EXPERIMENT_DISABLED"
+        assert backend.queries == 0
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "qwen3.8:27b-",
+        "qwen3.8:27b-a:b",
+        "qwen3.8:27b-a/b",
+        "qwen3.8:27b--q3",
+        "qwen3.8:27b- good",
+        "qwen3.8:27b-cloud",
+        "qwen3.8:28b-q3_k_xl",
+        "qwen3.8:27b_q3_k_xl",
+    ],
+)
+def test_qwen38_alias_predicate_rejects_non_family_names(name):
+    # 直接测判定函数：部分名称会被目录格式校验先拒绝，不能证明 alias 判定。
+    assert _qwen38_alias(name) is False
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "qwen3.8:27b--q3",
+        "qwen3.8:28b-q3_k_xl",
+        "qwen3.8:27b_q3_k_xl",
+    ],
+)
+def test_only_strict_27b_local_suffix_family_is_selectable(enough_memory, name):
+    async def scenario():
+        registry, backend = router([name, CANONICAL], qwen38_enabled=True)
+        refreshed = await registry.refresh()
+        # 目录层接受这些标签，但仍不能被当成 27B 实验别名。
+        assert name in refreshed["installed"]
+        assert backend.queries == 1
+        assert name not in registry.local_policies()
+        with pytest.raises(ApplicationError) as caught:
+            await registry.resolve(name)
+        assert caught.value.code == "MODEL_UNKNOWN"
+
+    asyncio.run(scenario())
+
+
 def test_policy_copies_for_all_aliases_preserve_memory_and_enable_gate(enough_memory):
     async def scenario():
         registry, _ = router([CANONICAL, OTHER_QUANT], qwen38_enabled=True)
@@ -97,7 +182,7 @@ def test_policy_copies_for_all_aliases_preserve_memory_and_enable_gate(enough_me
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("requested", [CANONICAL, QWEN38_MODEL, OTHER_QUANT])
+@pytest.mark.parametrize("requested", [CANONICAL, QWEN38_MODEL, OTHER_QUANT, LOCAL_QUANT])
 def test_any_alias_still_rejects_disabled_experiment(requested, enough_memory):
     async def scenario():
         registry, _ = router([CANONICAL, OTHER_QUANT, QWEN38_MODEL])
@@ -110,7 +195,7 @@ def test_any_alias_still_rejects_disabled_experiment(requested, enough_memory):
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("actual", [CANONICAL, OTHER_QUANT])
+@pytest.mark.parametrize("actual", [CANONICAL, OTHER_QUANT, LOCAL_QUANT])
 def test_discovered_27b_is_never_usable_with_16gb_ram(monkeypatch, actual):
     monkeypatch.setattr(
         resources,
@@ -213,6 +298,20 @@ def test_malformed_catalog_fails_closed(names):
         assert not registry.reachable
         assert listed["preferred_model"] is None
         assert not listed["discovered_models"]
+
+    asyncio.run(scenario())
+
+
+def test_oversized_catalog_fails_closed_without_partial_snapshot(enough_memory):
+    async def scenario():
+        registry, backend = router([LOCAL_QUANT], qwen38_enabled=True)
+        assert (await registry.refresh())["reachable"] is True
+        backend.names = [f"qwen3.5:{index}" for index in range(4097)]
+        listed = await registry.list()
+        assert not registry.reachable
+        assert not registry.installed
+        assert listed["preferred_model"] is None
+        assert listed["discovered_models"] == []
 
     asyncio.run(scenario())
 
