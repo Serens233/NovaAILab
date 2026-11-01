@@ -11,13 +11,18 @@ from benchmarks.model_benchmark.sanitize import (
     sanitize_lease,
 )
 
+_EXTERNAL_STATE = r"C:\Users\Example\AppData\Local\nova\data\gpu-mode.json"
+_EXTERNAL_LEASE = r"C:\Users\Example\lease.json"
+_EXTERNAL_PYTHON = r"C:\Users\Example\python.exe"
+_FAKE_GPU_UUID = "GPU-deadbeef-dead-beef-dead-beefdeadbeef"
+
 
 def test_config_paths_become_relative_and_lease_is_basename() -> None:
     config = {
         "cases_path": str(REPO_ROOT / "benchmarks" / "case.json"),
         "output_dir": str(REPO_ROOT / "benchmarks" / "results"),
-        "nova_state_path": r"C:\Users\Administrator\Documents\Codex\AI-Workspace\nova\data\gpu-mode.json",
-        "lease_path": r"C:\Users\Administrator\lease.json",
+        "nova_state_path": _EXTERNAL_STATE,
+        "lease_path": _EXTERNAL_LEASE,
         "models": ["qwen3.5:4b"],
     }
     sanitized = sanitize_config(config)
@@ -30,8 +35,8 @@ def test_config_paths_become_relative_and_lease_is_basename() -> None:
 
 def test_environment_drops_python_executable_and_gpu_uuid() -> None:
     environment = {
-        "os": {"platform": "Windows", "python_executable": r"C:\python.exe"},
-        "gpu": {"name": "RTX", "uuid": "GPU-secret"},
+        "os": {"platform": "Windows", "python_executable": _EXTERNAL_PYTHON},
+        "gpu": {"name": "RTX", "uuid": _FAKE_GPU_UUID},
     }
     sanitized = sanitize_environment(environment)
     assert "python_executable" not in sanitized["os"]
@@ -46,7 +51,7 @@ def test_lease_keeps_only_scheduling_fields() -> None:
         "models": ["qwen3.5:4b"],
         "max_seconds": 900,
         "remaining_s": 899.1,
-        "note": "private note with C:\\Users\\Administrator",
+        "note": "private note with C:\\Users\\Example",
     }
     assert sanitize_lease(lease) == {
         "granted_by": "main session",
@@ -66,16 +71,13 @@ def test_write_outputs_never_contains_local_identity(tmp_path) -> None:
         config={
             "cases_path": str(REPO_ROOT / "benchmarks" / "model_benchmark" / "cases" / "x.json"),
             "output_dir": str(tmp_path),
-            "lease_path": r"C:\Users\Administrator\lease.json",
+            "lease_path": _EXTERNAL_LEASE,
             "options": {"num_ctx": 4096, "num_predict": 128},
         },
         environment={
             "captured_at": "2026-11-01T22:00:00+08:00",
-            "os": {
-                "platform": "Windows",
-                "python_executable": r"C:\Users\Administrator\python.exe",
-            },
-            "gpu": {"name": "RTX", "uuid": "GPU-c7b71b16-979d-c15b-583b-b49c97460e42"},
+            "os": {"platform": "Windows", "python_executable": _EXTERNAL_PYTHON},
+            "gpu": {"name": "RTX", "uuid": _FAKE_GPU_UUID},
             "memory": {"total_mib": 16000},
         },
         models=[],
@@ -93,8 +95,8 @@ def test_write_outputs_never_contains_local_identity(tmp_path) -> None:
     write_outputs(run_dir, payload, cases)
     for name in ("results.json", "environment.json"):
         text = (run_dir / name).read_text(encoding="utf-8")
-        assert "Administrator" not in text
-        assert "GPU-c7b71b16" not in text
+        assert "Example" not in text
+        assert "deadbeef" not in text
     document = json.loads((run_dir / "results.json").read_text(encoding="utf-8"))
     assert document["config"]["lease_path"] == "<lease>/lease.json"
     assert document["config"]["output_dir"].startswith("<external>/")
