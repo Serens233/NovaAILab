@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "suite": "natural_dialogue",
+  "enabled": false,
+  "status": "reserved",
+  "note": "Interface example only. Multi-turn scoring is not implemented.",
+  "cases": [
+    {
+      "id": "daily_check_in_01",
+      "topic": "用户结束了忙碌的一天，想轻松聊几句",
+      "turns": [
+        {"role": "user", "content": "今天终于忙完了，脑子有点乱。"},
+        {"role": "assistant", "content": "先别再安排下一件事了。要不要从今天最吵的那一段说起？"},
+        {"role": "user", "content": "其实不是吵，是一直在切换任务。"},
+        {"role": "assistant", "content": "那更像是注意力被切成了很多小段。你现在最想先把哪一段放下？"}
+      ],
+      "probe_after_turns": 1,
+      "rubric": "自然承接、不过度安慰、提出一个具体而不侵入的追问。",
+      "expected_signals": ["references_previous_turn", "no_template_comfort", "one_focused_question"]
+    },
+    {
+      "id": "topic_shift_01",
+      "topic": "从工作话题自然转向用户的兴趣",
+      "turns": [
+        {"role": "user", "content": "最近在学做手冲咖啡，但总是偏酸。"},
+        {"role": "assistant", "content": "酸不一定是失败，先看它是明亮的果酸还是尖涩的酸。你用的是浅烘豆吗？"},
+        {"role": "user", "content": "浅烘，水温大概 90 度。"},
+        {"role": "assistant", "content": "90 度不算低。可以先试着把研磨调粗一点，或把注水节奏放慢，看看酸感会不会变圆。"}
+      ],
+      "probe_after_turns": 2,
+      "rubric": "保持话题连续、给出可执行建议、避免一次抛出过多变量。",
+      "expected_signals": ["topic_continuity", "actionable_advice", "bounded_variables"]
+    }
+  ]
+}

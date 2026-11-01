@@ -1,0 +1,50 @@
+{
+  "captured_at": "2026-11-01T22:53:37+08:00",
+  "timezone": "中国标准时间",
+  "benchmark_version": "0.1.0",
+  "os": {
+    "system": "Windows",
+    "release": "11",
+    "version": "10.0.26100",
+    "platform": "Windows-11-10.0.26100-SP0",
+    "python": "3.14.10",
+    "python_executable": "C:\\Users\\Administrator\\Documents\\Codex\\AI-Workspace\\nova\\.venv\\Scripts\\python.exe"
+  },
+  "cpu": {
+    "name": "AMD Ryzen 7 9700X 8-Core Processor",
+    "logical_processors": 16,
+    "machine": "AMD64"
+  },
+  "memory": {
+    "total_mib": 15477.3,
+    "available_mib": 2967.7,
+    "used_mib": 12509.7,
+    "load_percent": 80
+  },
+  "gpu": {
+    "available": true,
+    "index": 0,
+    "name": "NVIDIA GeForce RTX 5060 Ti",
+    "memory_total_mib": 16311,
+    "memory_used_mib": 2093,
+    "memory_free_mib": 13958,
+    "utilization_percent": 0,
+    "temperature_c": 45.61,
+    "driver_version": "621.01",
+    "uuid": "GPU-c7b71b16-979d-c15b-583b-b49c97460e42",
+    "nvidia_smi_version": "621.01"
+  },
+  "compute_apps": [],
+  "compute_apps_other_count": 25,
+  "compute_apps_note": "only Ollama/llama processes are retained; per-process VRAM may be N/A",
+  "git": {
+    "commit": "3bb0f6a7ffe868be1dc014772601fe41fa9036a6",
+    "branch": "experiment/dsh-model-benchmark",
+    "dirty": true,
+    "dirty_entries": 1,
+    "available": true
+  },
+  "ollama": {
+    "version": "0.40.13"
+  }
+}
