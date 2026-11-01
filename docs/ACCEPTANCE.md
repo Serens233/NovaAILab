@@ -76,7 +76,7 @@
 
 实测证据：`E:\NovaAILab\logs\gpu-round1-20261101-034738-331\live-with-cli\report.json`；全量测试输出为同目录上级的`pytest-release.txt`，开工快照为`baseline.json`。首次实测成功记录保留在`live-1`。真实验收结束时卸载模型、正常退出验收后端；Ollama服务保留，不启动收费调用或任意训练。
 
-**范围限制**：没有现成Nova聊天界面，本轮通过受控诊断推理入口验收门禁。训练显示unmanaged，未验证真实训练暂停；独立3分钟空闲调度、游戏进程模拟检测、AI_FOCUS、DeepSeek、vLLM和UI未实现，对应总体任务中的测试留待后续。外部直接访问11434的程序仍可加载模型。首轮通过后停止，使用方法见 [GPU管理说明](gpu-resource-manager.md)。
+**范围限制**：没有现成Nova聊天界面，本轮通过受控诊断推理入口验收门禁。训练租约为空时显示 `training.state=idle`（不表示没有外部训练），未验证真实训练暂停；独立3分钟空闲调度、游戏进程模拟检测、AI_FOCUS、DeepSeek、vLLM和UI未实现，对应总体任务中的测试留待后续。外部直接访问11434的程序仍可加载模型。首轮通过后停止，使用方法见 [GPU管理说明](gpu-resource-manager.md)。
 
 ## 当前状态
 

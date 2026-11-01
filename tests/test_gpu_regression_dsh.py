@@ -2,6 +2,10 @@
 
 全部使用进程内替身和临时状态目录，不访问真实 Ollama、nvidia-smi 或游戏进程。
 运行：``python -m pytest tests/test_gpu_regression_dsh.py -q``
+
+回归专用（regression-only）：本文件与 ``test_gpu_manager.py``、
+``test_gpu_game_holds.py``、``test_gpu_races.py`` 有场景重叠；重复的 fake 只服务
+本文件的完整链路，新增用例优先补到既有套件，避免继续扩大维护面。
 """
 
 import asyncio
@@ -72,11 +76,13 @@ class FakeBackend:
         self.unload_calls = 0
 
     async def get_model_status(self):
+        self.calls.append(("status",))
         if self.status_error:
             raise BackendError("synthetic unavailable")
         return [dict(item) for item in self.models]
 
     async def get_gpu_memory_usage(self):
+        self.calls.append(("memory",))
         return {
             "available": self.memory["available"],
             "gpus": [dict(item) for item in self.memory["gpus"]],
@@ -146,6 +152,14 @@ async def wait_until(predicate, timeout=2.0):
         if asyncio.get_running_loop().time() >= deadline:
             raise AssertionError("condition not reached before timeout")
         await asyncio.sleep(0.01)
+
+
+_MUTATING_CALLS = {"wake", "generate", "stream", "ensure", "unload"}
+
+
+def mutation_calls(backend):
+    """Only loading/unloading calls count as backend mutations; status reads may happen."""
+    return [call for call in backend.calls if call[0] in _MUTATING_CALLS]
 
 
 def test_observable_idle_inference_gaming_and_recovery(tmp_path):
@@ -297,8 +311,7 @@ def test_game_detection_waits_for_admitted_inference_then_unloads(tmp_path):
     reason=(
         "BUG-DSB-01: 游戏在推理期间被检测到且 drain 超时后，管理器写入 "
         "UNLOAD_NOT_VERIFIED 并只尝试一次卸载；推理结束后不会重试，模型继续占用显存。"
-        "见 src/nova/gpu/manager.py:602-658（_unload 的 drain 超时）与 "
-        "src/nova/gpu/manager.py:729-756 + detection.py:121-123（仅首次动作触发卸载）。"
+        "涉及 manager.py 的 _unload drain 分支与 detection.py 的首次动作触发卸载。"
     ),
 )
 def test_game_detection_drain_timeout_retries_after_inference_finishes(tmp_path):
@@ -355,7 +368,9 @@ def test_manual_gaming_retry_recovers_after_drain_timeout(tmp_path):
             await asyncio.wait_for(backend.generate_started.wait(), timeout=1)
             source.names = {"probe-game.exe"}
             await detector.poll_once()
-            assert manager.fault == "UNLOAD_NOT_VERIFIED"
+            # 具体故障码由 BUG-DSB-01 修复决定；这里只要求门禁保持锁定且故障可诊断。
+            assert manager.fault is not None
+            assert manager.blocked is True
             assert backend.models
 
             backend.generate_release.set()
@@ -388,7 +403,7 @@ def test_game_mode_blocks_every_background_loading_path(tmp_path):
         try:
             gaming = await manager.set_mode("GAMING")
             assert gaming["unload_verified"] is True
-            before = list(backend.calls)
+            before = mutation_calls(backend)
             lease_id = str(uuid4())
 
             with pytest.raises(ApplicationError) as wake:
@@ -409,7 +424,7 @@ def test_game_mode_blocks_every_background_loading_path(tmp_path):
             assert await manager.idle_tick(manager._last_request_finished + 1000) == {
                 "unloaded": False
             }
-            assert backend.calls == before
+            assert mutation_calls(backend) == before
             assert backend.models == []
 
             # 延迟重试也不能绕过门禁。
@@ -417,7 +432,7 @@ def test_game_mode_blocks_every_background_loading_path(tmp_path):
             with pytest.raises(ApplicationError) as retry:
                 await manager.wake()
             assert retry.value.code == "GPU_GAMING"
-            assert backend.calls == before
+            assert mutation_calls(backend) == before
         finally:
             await manager.close()
 
@@ -568,7 +583,7 @@ def test_ollama_outage_degrades_and_recovers_without_stale_success(tmp_path):
         "BUG-DSB-02: claim_training 在写入租约状态失败时已经设置内存中的 "
         "training_lease(preparing)，但没有清理；调用方拿不到 lease id，"
         "release_training 又以 TRAINING_PREPARING 拒绝，GPU 入口只能靠重启恢复。"
-        "见 src/nova/gpu/manager.py:794-810。"
+        "涉及 manager.py 的 claim_training 失败清理分支。"
     ),
 )
 def test_training_claim_state_write_failure_does_not_leak_unreleasable_lease(tmp_path):
@@ -649,6 +664,104 @@ def test_restart_uncertain_state_and_training_lease_require_explicit_recovery(tm
             assert manager.fault is None
             assert (await manager.set_mode("AUTO"))["mode"] == "AUTO"
             assert (await manager.wake())["done"] is True
+        finally:
+            await manager.close()
+
+    asyncio.run(scenario())
+
+
+def test_drain_timeout_stays_locked_and_never_reloads(tmp_path):
+    """BUG-DSB-01 的安全不变量：即使修复改变实现，门禁也不能自动打开或重载。
+
+    具体“结束后是否重试卸载”留给 strict xfail；这个非 xfail 用例防止缺陷恶化成
+    自动退出 GAMING、自动唤醒模型或丢失故障诊断。
+    """
+
+    async def scenario():
+        backend = FakeBackend()
+        source, clock = ProcessSource(), Clock()
+        manager = manager_for(tmp_path, backend, detection_enabled=True, drain_timeout=0.01)
+        detector = detector_for(manager, source, clock)
+        await manager.start()
+        work = None
+        try:
+            await detector.poll_once()
+            backend.generate_release = asyncio.Event()
+            work = asyncio.create_task(manager.generate("超过排空窗口的请求"))
+            await asyncio.wait_for(backend.generate_started.wait(), timeout=1)
+
+            source.names = {"probe-game.exe"}
+            await detector.poll_once()
+            assert manager.mode == "GAMING"
+            assert manager.blocked is True
+            assert manager.fault is not None
+            wake_calls = backend.calls.count(("wake", None))
+
+            backend.generate_release.set()
+            await work
+            await detector.poll_once()
+
+            # 保护期间不能自动重载、自动解除 GAMING 或丢弃故障。
+            assert manager.mode == "GAMING"
+            assert manager.blocked is True
+            assert backend.calls.count(("wake", None)) == wake_calls
+            status = await manager.status()
+            assert status["training"]["state"] == "idle"
+            assert status["training"]["lease"] is None
+            # 修复后重试可能已清除故障；但只要还有故障就必须可诊断。
+            if status["fault"] is not None:
+                assert isinstance(status["fault"], str)
+            with pytest.raises(ApplicationError) as blocked:
+                await manager.wake()
+            assert blocked.value.code == "GPU_GAMING"
+
+            # 诊断后仍保留显式恢复路径。
+            recovered = await manager.set_mode("GAMING")
+            assert recovered["unload_verified"] is True
+            await manager.set_detected_gaming(False, CLEAR_INFO)
+            assert (await manager.set_mode("AUTO"))["mode"] == "AUTO"
+        finally:
+            backend.generate_release.set()
+            if work is not None:
+                await asyncio.gather(work, return_exceptions=True)
+            await detector.stop()
+            await manager.close()
+
+    asyncio.run(scenario())
+
+
+def test_training_state_failure_keeps_gate_locked_and_lease_visible(tmp_path):
+    """BUG-DSB-02 的安全不变量：失败后入口锁定、故障和租约可诊断、不偷偷加载。"""
+
+    async def scenario():
+        backend = FakeBackend()
+        manager = manager_for(tmp_path, backend)
+        await manager.start()
+        try:
+            blocker = tmp_path / "blocked-parent"
+            blocker.write_text("preserve", encoding="utf-8")
+            manager.state_path = blocker / "gpu-mode.json"
+
+            with pytest.raises(ApplicationError) as caught:
+                await manager.claim_training(str(uuid4()), 4096)
+            assert (caught.value.code, caught.value.status_code) == ("GPU_STATE_FAILED", 503)
+
+            status = await manager.status()
+            assert manager.mode == "GAMING"
+            assert status["local_requests_blocked"] is True
+            assert status["fault"] == "STATE_WRITE_FAILED"
+            lease = status["training"]["lease"]
+            if lease is None:
+                # 修复后预留会被撤销；这也是可接受的诊断结果。
+                assert status["training"]["state"] == "idle"
+            else:
+                assert status["training"]["state"] == "preparing"
+                assert lease["state"] == "preparing"
+            assert backend.calls.count(("wake", None)) == 0
+            assert backend.calls.count(("generate", "训练期间偷偷加载")) == 0
+            with pytest.raises(ApplicationError):
+                await manager.wake()
+            assert blocker.read_text(encoding="utf-8") == "preserve"
         finally:
             await manager.close()
 

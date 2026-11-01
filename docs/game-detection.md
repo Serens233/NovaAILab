@@ -128,4 +128,4 @@ E:\NovaAILab\logs\gpu-game-detection-20261101-040957-872\live-1\report.json
 
 **保护范围仍是经 Nova 管理器发起的请求。** 外部程序直接访问 Ollama 的 `127.0.0.1:11434` 仍可能重新加载模型，原 Lab 直接推理示例也可以绕过门禁。游戏检测不是 Windows 层面的 GPU 独占或防火墙隔离。
 
-本轮未实现独立的三分钟空闲休眠任务、训练启动互斥或安全检查点暂停、AI_FOCUS、vLLM Sleep Mode、云端回退和图形界面。`training.state=unmanaged` 不代表没有训练或训练已经暂停；游戏结束后也不会自动恢复训练。
+本轮未实现独立的三分钟空闲休眠任务、训练启动互斥或安全检查点暂停、AI_FOCUS、vLLM Sleep Mode、云端回退和图形界面。`training.state=idle` 表示没有登记训练租约，不代表没有外部训练或训练已经暂停；游戏结束后也不会自动恢复训练。
