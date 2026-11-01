@@ -87,7 +87,7 @@ def test_gaming_blocks_generation_and_wake_but_keeps_database_healthy(gpu_app):
     with TestClient(app) as client:
         initial = client.get("/api/gpu/status", headers=AUTH)
         assert initial.status_code == 200
-        assert initial.json()["training"]["state"] == "unmanaged"
+        assert initial.json()["training"]["state"] == "idle"
         assert initial.json()["game_detection"]["enabled"] is False
         assert initial.json()["gpu_memory"]["available"] is True
         gaming = client.post("/api/gpu/mode", json={"mode": "GAMING"}, headers=AUTH)

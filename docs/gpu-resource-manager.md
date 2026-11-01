@@ -140,7 +140,7 @@ GAMING 返回成功后，先查看 `backend.models`、`unload_verified` 和 `las
 - `unload_verified`：最近卸载操作已成功确认，且当前查询仍无驻留模型。
 - `last_unload_at`：最近一次成功卸载的时间，随模式状态持久化；它不能单独证明当前仍无模型。
 - `last_operation`：当前进程最近的操作信息、模型加载耗时与显存采样；另有持久化事件记录供核对。
-- `training.state=unmanaged`：没有接管训练，不代表没有训练进程，更不代表训练已暂停。
+- `training.state`：没有登记训练租约时为 `idle`；登记后为 `preparing`、`reserved` 或重启后的 `unknown_after_restart`。`idle` 不代表没有外部训练进程，更不代表训练已暂停；`unmanaged` 是引入租约前的旧值，已不再返回。
 - `game_detection`：首轮默认关闭；后续可选检测与状态字段见 [游戏检测说明](game-detection.md)。`cloud_fallback.enabled=false` 继续保持。
 
 `nvidia-smi` 的总显存使用包含桌面、游戏、运行时及其他程序；Ollama 的 `size_vram` 只描述它报告的模型驻留量。Windows WDDM 下某些计算进程的显存为 N/A，接口保留为未知值，不能当作 0。
