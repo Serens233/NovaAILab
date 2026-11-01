@@ -5,6 +5,10 @@
 ## 当前内容
 
 - `inventory-20261101/`：2026-11-01 22:52（Asia/Shanghai）只读采集的 Ollama 模型清单、量化、模型元数据、CPU/GPU/内存/Git 环境。没有加载模型，没有性能数据。
+- `20261101T230010+0800-b39b/`：**主结果**。4B 与 9B 均完成 1 次冷启动 + 9 次热启动；状态 `completed`。
+- `20261101T225657+0800-625f/`：首次尝试，4B 冷启动 HTTP 500、9B 完成；保留为失败/重试证据，见其中的 `RETRY_NOTE.md`。4B 最终数据不取自此目录。
+
+简短结论见 [run-20261101.md](../docs/run-20261101.md)。
 
 ## 运行产物
 
@@ -31,7 +35,7 @@ python -m benchmarks.model_benchmark run --models qwen3.5:4b,qwen3.5:9b --execut
 
 复现时确认：
 
-- 基准 commit 与 `baseline.baseline_commit` 一致；
+- 统一基准 commit 与 `baseline.baseline_commit` 一致；
 - 模型 digest 与 `models[].digest` 一致；
 - 量化以 `details.quantization_level` 为准；
 - 环境、驱动、Ollama 版本、固定样例哈希与报告一致；

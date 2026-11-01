@@ -358,6 +358,20 @@ def _render_environment(environment: dict[str, object]) -> str:
     return _md_table(["项目", "值"], rows)
 
 
+def _case_token_limits(payload: dict[str, object], options: dict[str, object]) -> str:
+    cases = payload.get("cases")
+    items = cases.get("items") if isinstance(cases, dict) else None
+    if not isinstance(items, list):
+        return "—"
+    default = options.get("num_predict")
+    parts = []
+    for case in items:
+        if not isinstance(case, dict):
+            continue
+        parts.append(f"{case.get('id')}={case.get('max_tokens') or default}")
+    return ", ".join(parts) if parts else "—"
+
+
 def render_summary(payload: dict[str, object]) -> str:
     environment = payload.get("environment") if isinstance(payload.get("environment"), dict) else {}
     models = payload.get("models") if isinstance(payload.get("models"), list) else []
@@ -370,7 +384,8 @@ def render_summary(payload: dict[str, object]) -> str:
         "",
         f"- 运行 ID：`{payload.get('run_id')}`",
         f"- 状态：`{payload.get('status')}`",
-        f"- 基准 Commit：`{baseline.get('commit')}`",
+        f"- 统一基准 Commit：`{baseline.get('baseline_commit')}`",
+        f"- 运行代码 Commit：`{baseline.get('commit')}`",
         f"- 分支：`{baseline.get('branch')}`",
         f"- 测试时间：{environment.get('captured_at')}",
         f"- 测试样例 SHA-256：`{payload.get('cases', {}).get('sha256') if isinstance(payload.get('cases'), dict) else None}`",
@@ -402,7 +417,8 @@ def render_summary(payload: dict[str, object]) -> str:
         "## 测试条件",
         "",
         f"- 上下文长度 `num_ctx`：{options.get('num_ctx')}",
-        f"- 最大生成 token：{options.get('num_predict')}",
+        f"- 全局 `num_predict`：{options.get('num_predict')}；每个样例的 `max_tokens` 会覆盖",
+        f"- 样例 token 上限：{_case_token_limits(payload, options)}",
         f"- 采样：temperature={options.get('temperature')}, top_p={options.get('top_p')}, "
         f"top_k={options.get('top_k')}, seed={options.get('seed')}, "
         f"repeat_penalty={options.get('repeat_penalty')}",
