@@ -151,10 +151,19 @@ def test_drain_timeout_preserves_gaming_without_cancelling_generation(tmp_path):
             assert not backend.unload_started.is_set()
             backend.generate_release.set()
             await generation
-            with pytest.raises(ApplicationError):
-                await manager.set_mode("AUTO")
-            await manager.unload()
-            await manager.set_mode("AUTO")
+            # 推理结束后由显式补偿任务复用原卸载流程，不需要空闲调度或人工重试。
+            for _ in range(100):
+                if (await manager.status())["unload_verified"]:
+                    break
+                await asyncio.sleep(0.01)
+            status = await manager.status()
+            assert status["unload_verified"]
+            assert status["backend"]["models"] == []
+            assert status["mode"] == "GAMING"
+            assert status["manual_gaming"] is True
+            assert status["pending_unloads"] == 0
+            assert backend.unload_started.is_set()
+            assert (await manager.set_mode("AUTO"))["mode"] == "AUTO"
         finally:
             backend.generate_release.set()
             await manager.close()

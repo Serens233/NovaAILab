@@ -104,6 +104,8 @@ class GpuManager:
         self._last_request_finished = time.monotonic()
         self._idle_check = asyncio.Lock()
         self._controls = set()
+        # 取消或排空超时后，卸载责任必须显式登记，不能靠“控制锁被占用”推断。
+        self._reclaims = {}
         self._idle = asyncio.Event()
         self._idle.set()
         self._control = asyncio.Lock()
@@ -146,11 +148,16 @@ class GpuManager:
                         raise ValueError("training lease")
                     UUID(training["id"])
                     UUID(training["job_id"])
-                    if type(training["required_mib"]) is not int or not 1 <= training["required_mib"] <= 65536:
+                    if (
+                        type(training["required_mib"]) is not int
+                        or not 1 <= training["required_mib"] <= 65536
+                    ):
                         raise ValueError("training lease")
                     self.training_lease = {
-                        "id": training["id"], "job_id": training["job_id"],
-                        "required_mib": training["required_mib"], "state": "unknown_after_restart",
+                        "id": training["id"],
+                        "job_id": training["job_id"],
+                        "required_mib": training["required_mib"],
+                        "state": "unknown_after_restart",
                     }
                 if state.get("uncertain") or state.get("fault"):
                     self.mode = "GAMING"
@@ -217,7 +224,9 @@ class GpuManager:
                 "GPU_GAMING", "本地模型暂不可用；游戏模式或安全锁定生效，云端未启用", 423
             )
         if self.training_lease and self.training_lease["id"] != training_lease_id:
-            raise ApplicationError("GPU_TRAINING_ACTIVE", "训练资源已预留，请安全结束训练并释放租约", 409)
+            raise ApplicationError(
+                "GPU_TRAINING_ACTIVE", "训练资源已预留，请安全结束训练并释放租约", 409
+            )
         if self._active - ({preparing_task} if preparing_task is not None else set()):
             raise ApplicationError("GPU_BUSY", "已有本地模型请求，请等待完成", 409)
 
@@ -319,6 +328,7 @@ class GpuManager:
             "detected_gaming": self.detected_gaming,
             "local_requests_blocked": self.blocked,
             "active_requests": len(self._active),
+            "pending_unloads": len(self._reclaims),
             "unload_verified": self.unload_verified
             and backend["available"]
             and not backend["models"],
@@ -478,7 +488,9 @@ class GpuManager:
         self._check_gpu_memory(memory, models, model, required_mib)
         return memory
 
-    async def _chat_worker(self, model, messages, required_mib, queue, ready, think=None, control=None):
+    async def _chat_worker(
+        self, model, messages, required_mib, queue, ready, think=None, control=None
+    ):
         task = asyncio.current_task()
         started = False
         result = None
@@ -518,16 +530,23 @@ class GpuManager:
                 "request_duration_ms": result["stats"].get("request_duration_ms"),
                 "system_memory_before": ram_before,
                 "system_memory_after": get_system_memory(),
-                "model_allocation": [model_allocation(item) for item in await self.backend.get_model_status()],
+                "model_allocation": [
+                    model_allocation(item) for item in await self.backend.get_model_status()
+                ],
                 "gpu_before": before,
                 "gpu_after": await self.backend.get_gpu_memory_usage(),
             }
             self._audit()
         except CancelledBackendError:
             # HTTP线程已结束，但GPU释放仍需原卸载机制确认；不能仅凭断开连接放行。
+            self.unload_verified = False
             try:
                 if self._control.locked() or self._pending_controls:
+                    # 控制锁可能属于 AUTO 状态查询，不能假定持有者会卸载；
+                    # 显式登记回收任务，待锁释放且本任务退出后执行原卸载与复核。
                     self.fault = "CANCELLED_AWAITING_UNLOAD"
+                    self._persist()
+                    self._schedule_reclaim("task_cancelled")
                 else:
                     async with self._control:
                         self._preparing.add(task)
@@ -599,7 +618,68 @@ class GpuManager:
             )
             return {"unloaded": not result.get("deferred", False)}
 
-    async def _unload(self, reason="manual", *, preparing_task=None):
+    def _cancel_reclaims(self, *, exclude=None):
+        """成功卸载后撤销其他待办；当前执行卸载的任务不能取消自己。"""
+        for task in tuple(self._reclaims):
+            if task is not exclude and not task.done():
+                task.cancel()
+
+    def _schedule_reclaim(self, reason):
+        """显式登记谁负责卸载；同一原因只保留一个重试链。"""
+        for task, existing in self._reclaims.items():
+            if existing == reason and not task.done():
+                return task
+        if self._closing:
+            return None
+        task = asyncio.create_task(self._reclaim(reason))
+        self._reclaims[task] = reason
+
+        def finished(done):
+            self._reclaims.pop(done, None)
+            if done.cancelled():
+                return
+            try:
+                done.result()
+            except Exception:
+                # 失败原因已写入 fault；这里只保留后台任务异常的可诊断记录。
+                logger.warning("gpu_reclaim_failed", exc_info=True)
+
+        task.add_done_callback(finished)
+        return task
+
+    async def _reclaim(self, reason):
+        """等待排空后复用原卸载流程；退避重试直到确认或安全关闭。"""
+        delay = max(0.05, min(1.0, float(self.drain_timeout)))
+        while not self._closing:
+            await self._idle.wait()
+            if self._closing:
+                return
+            if self.unload_verified and self.fault is None:
+                return
+            if reason == "drain_timeout" and not (
+                self.manual_gaming or self.detected_gaming or self.mode == "GAMING"
+            ):
+                return
+            try:
+                async with self._control:
+                    if self.unload_verified and self.fault is None:
+                        return
+                    if reason == "drain_timeout" and not (
+                        self.manual_gaming or self.detected_gaming or self.mode == "GAMING"
+                    ):
+                        return
+                    await self._unload(reason, compensate=False)
+                return
+            except asyncio.CancelledError:
+                raise
+            except ApplicationError, BackendError:
+                if self._closing:
+                    return
+                # 卸载失败时 fault 仍保留；退避避免持续冲击 Ollama 或状态文件。
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 30.0)
+
+    async def _unload(self, reason="manual", *, preparing_task=None, compensate=True):
         self.unload_verified = False
         self._suspended = True
         try:
@@ -628,6 +708,8 @@ class GpuManager:
             after = await self.backend.get_gpu_memory_usage()
             self.unload_verified = True
             self.fault = None
+            # 成功的原流程卸载已覆盖其他待办；除当前重试链外不再重复卸载。
+            self._cancel_reclaims(exclude=asyncio.current_task())
             self.last_unload_at = datetime.now(UTC).isoformat()
             self.last_operation = {
                 "operation": "unload",
@@ -648,6 +730,13 @@ class GpuManager:
             self.mode = "GAMING"
             self.fault = "UNLOAD_NOT_VERIFIED"
             self._persist()
+            if (
+                compensate
+                and isinstance(error, ApplicationError)
+                and error.code == "GPU_DRAIN_TIMEOUT"
+            ):
+                # 推理结束后不能依赖空闲调度（fault 会让它跳过），必须显式补偿卸载。
+                self._schedule_reclaim("drain_timeout")
             logger.warning("gpu_unload_unverified")
             if isinstance(error, ApplicationError):
                 raise
@@ -723,6 +812,8 @@ class GpuManager:
                 )
             self.mode = "AUTO"
             self.manual_gaming = False
+            # 显式退出保护后不再让旧卸载重试链影响后续按需加载。
+            self._cancel_reclaims()
             self._persist()
             return await self.status()
 
@@ -796,16 +887,36 @@ class GpuManager:
         try:
             job_id = str(UUID(job_id))
         except ValueError, TypeError, AttributeError:
-            raise ApplicationError("TRAINING_JOB_INVALID", "训练任务必须使用UUID标识", 422) from None
+            raise ApplicationError(
+                "TRAINING_JOB_INVALID", "训练任务必须使用UUID标识", 422
+            ) from None
         if type(required_mib) is not int or not 1 <= required_mib <= 65536:
             raise ApplicationError("TRAINING_MEMORY_INVALID", "训练显存需求无效", 422)
         self._admit()
         lease_id = str(uuid4())
         self.training_lease = {
-            "id": lease_id, "job_id": job_id,
-            "required_mib": required_mib, "state": "preparing",
+            "id": lease_id,
+            "job_id": job_id,
+            "required_mib": required_mib,
+            "state": "preparing",
         }
-        self._persist()
+        try:
+            self._persist()
+        except ApplicationError:
+            # 首次落盘失败时租约从未持久化，也尚未交付给训练程序；
+            # 必须撤销内存中的 preparing 预留，否则调用方拿不到 id 也无法释放。
+            if (
+                self.training_lease is not None
+                and self.training_lease["id"] == lease_id
+                and self.training_lease["state"] == "preparing"
+            ):
+                self.training_lease = None
+                try:
+                    self._persist()
+                except ApplicationError:
+                    # 存储仍不可用时保留 STATE_WRITE_FAILED；内存中的租约已撤销。
+                    pass
+            raise
 
         async def prepare():
             try:
@@ -850,6 +961,11 @@ class GpuManager:
 
     async def close(self):
         self._closing = True
+        reclaims = tuple(self._reclaims)
+        for task in reclaims:
+            task.cancel()
+        if reclaims:
+            await asyncio.gather(*reclaims, return_exceptions=True)
         tasks = self._active | self._controls
         pending = set()
         if tasks:
