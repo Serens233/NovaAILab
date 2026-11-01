@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import json
+import time
 
 import pytest
 from fake_ollama import FakeOllamaServer
 
+from benchmarks.model_benchmark import runner as runner_module
 from benchmarks.model_benchmark.config import BenchmarkConfig
 from benchmarks.model_benchmark.monitor import MonitorSummary
 from benchmarks.model_benchmark.ollama_client import OllamaClient
 from benchmarks.model_benchmark.runner import BenchmarkRunner
-from benchmarks.model_benchmark.safety import SafetyError
+from benchmarks.model_benchmark.safety import DeadlineExceeded, SafetyError
 
 
 class FakeMonitor:
@@ -91,12 +93,13 @@ def _config(path, **overrides) -> BenchmarkConfig:
         "lease_path": path.parent / "lease.json",
         "lock_path": path.parent / "bench.lock",
         "baseline_commit": "3bb0f6a7ffe868be1dc014772601fe41fa9036a6",
+        "include_preview": True,
     }
     values.update(overrides)
     return BenchmarkConfig(**values)
 
 
-def _preflight(_config, _client, _environment):
+def _preflight(_config, _client, _environment, **_kwargs):
     return {
         "ok": True,
         "checks": [],
@@ -194,3 +197,85 @@ def test_reserved_suite_is_refused(tmp_path) -> None:
         )
         with pytest.raises(SafetyError):
             runner.run()
+
+
+def _runner(server, config) -> BenchmarkRunner:
+    return BenchmarkRunner(
+        config,
+        OllamaClient(server.url, timeout_s=5.0),
+        _environment(),
+        monitor_factory=lambda interval: FakeMonitor(),
+        preflight_fn=_preflight,
+    )
+
+
+def test_runner_refuses_resident_models_without_opt_in(tmp_path) -> None:
+    with FakeOllamaServer() as server:
+        server.state.loaded["qwen3.5:9b"] = {"loaded": True}
+        config = _config(_cases_path(tmp_path))
+        with pytest.raises(SafetyError, match="已驻留模型"):
+            _runner(server, config).run()
+        assert server.state.loaded == {"qwen3.5:9b": {"loaded": True}}
+        assert server.state.unload_calls == []
+
+
+def test_runner_takeover_unloads_only_when_explicitly_allowed(tmp_path) -> None:
+    with FakeOllamaServer() as server:
+        server.state.loaded["qwen3.5:9b"] = {"loaded": True}
+        config = _config(_cases_path(tmp_path), allow_unload_loaded=True)
+        payload = _runner(server, config).run()
+        assert payload["takeover"]["previously_loaded"] == ["qwen3.5:9b"]
+        assert payload["takeover"]["restored"] is False
+        assert server.state.unload_calls[0] == "qwen3.5:9b"
+        assert payload["status"] == "completed"
+        assert any("不会自动恢复" in item for item in payload["limitations"])
+
+
+def test_runner_stops_with_blocked_result_when_deadline_expires(tmp_path, monkeypatch) -> None:
+    with FakeOllamaServer() as server:
+        config = _config(_cases_path(tmp_path))
+        runner = _runner(server, config)
+        clock = iter([0.0, 100.0, 100.0, 100.0])
+        monkeypatch.setattr(runner_module.time, "monotonic", lambda: next(clock))
+        payload = runner.run()
+        assert payload["status"] == "blocked"
+        assert "独占窗口" in str(payload["error"])
+        assert payload["models"][0]["status"] == "failed"
+        run_dir = config.output_dir / str(payload["run_id"])
+        document = json.loads((run_dir / "results.json").read_text(encoding="utf-8"))
+        assert document["status"] == "blocked"
+        assert document["runs"] == []
+
+
+def test_deadline_check_rejects_expired_window(tmp_path) -> None:
+    runner = BenchmarkRunner(_config(_cases_path(tmp_path)), object(), _environment())
+    runner._deadline = time.monotonic() - 1
+    with pytest.raises(DeadlineExceeded):
+        runner._check_deadline()
+
+
+def test_model_memory_is_never_taken_from_another_entry(tmp_path) -> None:
+    class PsClient:
+        def ps(self):
+            return [{"name": "qwen3.5:9b", "size_vram": 123}]
+
+    runner = BenchmarkRunner(_config(_cases_path(tmp_path)), PsClient(), _environment())
+    assert runner._model_ps_entry("qwen3.5:4b") is None
+
+
+def test_settle_waits_once_after_the_cold_run(tmp_path, monkeypatch) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr(runner_module.time, "sleep", lambda seconds: sleeps.append(seconds))
+    with FakeOllamaServer() as server:
+        config = _config(_cases_path(tmp_path), settle_s=0.5)
+        payload = _runner(server, config).run()
+        assert payload["status"] == "completed"
+    assert sleeps.count(0.5) == 1
+
+
+def test_preview_is_off_by_default(tmp_path) -> None:
+    with FakeOllamaServer() as server:
+        config = _config(_cases_path(tmp_path), include_preview=False)
+        payload = _runner(server, config).run()
+        assert payload["runs"][0]["response"]["preview"] is None
+        assert payload["runs"][0]["response"]["chars"] > 0

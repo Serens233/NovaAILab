@@ -7,6 +7,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 TESTS = Path(__file__).resolve().parent
-for item in (ROOT, TESTS):
+for item in (ROOT, ROOT / "src", TESTS):
     if str(item) not in sys.path:
         sys.path.insert(0, str(item))

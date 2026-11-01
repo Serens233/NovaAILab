@@ -10,20 +10,17 @@ from __future__ import annotations
 import hashlib
 import secrets
 import time
+from datetime import UTC, datetime
 
 from .cases import TestCase, load_cases
-from .config import (
-    EXPERIMENTAL_MIN_AVAILABLE_RAM_MIB,
-    EXPERIMENTAL_MIN_TOTAL_RAM_MIB,
-    BenchmarkConfig,
-    is_experimental_model,
-)
+from .config import REPO_ROOT, BenchmarkConfig
 from .environment import iso_now, timestamp_slug
 from .metrics import extract_timings
 from .monitor import ResourceMonitor
+from .nova_policy import NovaPolicy, load_policy
 from .ollama_client import OllamaClient, OllamaError
 from .report import build_payload, write_outputs
-from .safety import RunLock, SafetyError, assert_preflight, check_preflight
+from .safety import DeadlineExceeded, RunLock, SafetyError, assert_preflight, check_preflight
 from .suites import get_suite
 
 _STATIC_LIMITATIONS = [
@@ -131,29 +128,39 @@ def _admission(
     installed: bool,
     environment: dict[str, object],
     allow_experimental: bool,
+    policy: NovaPolicy,
 ) -> dict[str, object]:
     if not installed:
         return {"allowed": False, "reason": "模型未安装"}
-    if not is_experimental_model(model):
+    if not policy.is_experimental(model):
         return {"allowed": True, "reason": ""}
     memory = environment.get("memory") if isinstance(environment.get("memory"), dict) else {}
+    gpu = environment.get("gpu") if isinstance(environment.get("gpu"), dict) else {}
     total = memory.get("total_mib")
     available = memory.get("available_mib")
+    free_vram = gpu.get("memory_free_mib")
     if not allow_experimental:
         return {"allowed": False, "reason": "27B 实验模型默认关闭，且未获准本轮加载"}
-    if not isinstance(total, (int, float)) or total < EXPERIMENTAL_MIN_TOTAL_RAM_MIB:
+    if not policy.experimental_enabled:
+        return {"allowed": False, "reason": "Nova 配置中未启用 27B 实验模型"}
+    if not isinstance(total, (int, float)) or total < policy.min_total_ram_mib:
         return {
             "allowed": False,
             "reason": (
-                f"系统总内存 {total} MiB 低于 Nova 的 {EXPERIMENTAL_MIN_TOTAL_RAM_MIB} MiB 准入线"
+                f"系统总内存 {total} MiB 低于 Nova 的 {policy.min_total_ram_mib} MiB 准入线"
             ),
         }
-    if not isinstance(available, (int, float)) or available < EXPERIMENTAL_MIN_AVAILABLE_RAM_MIB:
+    if not isinstance(available, (int, float)) or available < policy.min_available_ram_mib:
         return {
             "allowed": False,
             "reason": (
-                f"系统可用内存 {available} MiB 低于 {EXPERIMENTAL_MIN_AVAILABLE_RAM_MIB} MiB 准入线"
+                f"系统可用内存 {available} MiB 低于 {policy.min_available_ram_mib} MiB 准入线"
             ),
+        }
+    if not isinstance(free_vram, (int, float)) or free_vram < policy.min_free_vram_mib:
+        return {
+            "allowed": False,
+            "reason": (f"可用显存 {free_vram} MiB 低于 {policy.min_free_vram_mib} MiB 准入线"),
         }
     return {"allowed": True, "reason": ""}
 
@@ -162,6 +169,7 @@ def describe_models(
     client: OllamaClient,
     config: BenchmarkConfig,
     environment: dict[str, object],
+    policy: NovaPolicy,
 ) -> list[dict[str, object]]:
     tags = client.tags()
     models = []
@@ -183,6 +191,7 @@ def describe_models(
                 installed=installed,
                 environment=environment,
                 allow_experimental=config.allow_experimental,
+                policy=policy,
             ),
         }
         size = tag.get("size") if tag else None
@@ -215,6 +224,7 @@ class BenchmarkRunner:
         self.preflight_fn = preflight_fn
         self.output_writer = output_writer
         self._run_counter = 0
+        self._deadline: float | None = None
 
     def plan(self) -> dict[str, object]:
         cases = load_cases(self.config.cases_path, self.config.case_ids)
@@ -240,14 +250,16 @@ class BenchmarkRunner:
         if suite.status != "available":
             raise SafetyError(f"suite {suite.id!r} is reserved and cannot be executed")
         cases = load_cases(self.config.cases_path, self.config.case_ids)
+        policy = load_policy(REPO_ROOT)
         environment = dict(self.environment)
         try:
             environment["ollama"] = {"version": self.client.version().get("version")}
         except OllamaError as exc:
             environment["ollama"] = {"version": None, "error": str(exc)}
-        models = describe_models(self.client, self.config, environment)
-        preflight = self.preflight_fn(self.config, self.client, environment)
+        models = describe_models(self.client, self.config, environment, policy)
+        preflight = self.preflight_fn(self.config, self.client, environment, policy=policy)
         assert_preflight(preflight)
+        self._arm_deadline(preflight)
 
         run_id = f"{timestamp_slug()}-{secrets.token_hex(2)}"
         run_dir = self.config.output_dir / run_id
@@ -261,9 +273,16 @@ class BenchmarkRunner:
             "dirty": (environment.get("git") or {}).get("dirty"),
             "baseline_commit": self.config.baseline_commit,
         }
+        abort_reason: str | None = None
+        takeover = {"previously_loaded": [], "unloaded": [], "restored": False}
         lock = RunLock(self.config.lock_path, run_id=run_id)
         with lock:
+            takeover = self._take_over_loaded_models()
             for model in models:
+                if abort_reason is not None:
+                    model["status"] = "skipped"
+                    model["skip_reason"] = "独占窗口已用尽，未开始该模型"
+                    continue
                 admission = (
                     model.get("admission") if isinstance(model.get("admission"), dict) else {}
                 )
@@ -271,7 +290,13 @@ class BenchmarkRunner:
                     model["status"] = "skipped"
                     continue
                 try:
+                    self._check_deadline()
                     model_runs = self._run_model(model, cases, preflight)
+                except DeadlineExceeded as exc:
+                    model["status"] = "failed"
+                    model["error"] = _safe_error(exc)
+                    abort_reason = str(exc)
+                    continue
                 except (OllamaError, SafetyError, OSError, ValueError) as exc:
                     model["status"] = "failed"
                     model["error"] = _safe_error(exc)
@@ -296,14 +321,21 @@ class BenchmarkRunner:
                     }
                 )
 
-        status = self._overall_status(models, runs)
+        status = "blocked" if abort_reason else self._overall_status(models, runs)
         limitations = list(_STATIC_LIMITATIONS)
         if self.config.cold_repetitions == 0:
             limitations.append("本次未执行冷启动卸载/加载。")
-        if any(is_experimental_model(str(model.get("id"))) for model in models):
+        if any(policy.is_experimental(str(model.get("id"))) for model in models):
             limitations.append("27B 只做了元数据/准入检查；未加载、未测量。")
         if self.config.include_preview:
             limitations.append("响应仅保留截断预览和 SHA-256，不保存完整原始输出。")
+        else:
+            limitations.append("默认不保存模型回复预览，只保留长度与 SHA-256。")
+        if takeover["unloaded"]:
+            limitations.append(
+                "运行前按 --allow-unload-loaded 卸载了租约列出的已驻留模型；"
+                "运行结束不会自动恢复这些模型。"
+            )
         if preflight.get("warnings"):
             limitations.extend(str(item) for item in preflight["warnings"])
         payload = build_payload(
@@ -317,10 +349,64 @@ class BenchmarkRunner:
             cases=cases,
             suite_results=all_suite_results,
             limitations=limitations,
+            error=abort_reason,
         )
         payload["preflight"] = preflight
+        payload["takeover"] = takeover
         self.output_writer(run_dir, payload, cases)
         return payload
+
+    def _arm_deadline(self, preflight: dict[str, object]) -> None:
+        now = time.monotonic()
+        deadline = now + self.config.max_duration_s
+        lease = preflight.get("lease")
+        if isinstance(lease, dict):
+            expires_raw = lease.get("expires_at")
+            if isinstance(expires_raw, str):
+                try:
+                    expires_at = datetime.fromisoformat(expires_raw)
+                except ValueError as exc:
+                    raise SafetyError("GPU lease expires_at is not ISO-8601") from exc
+                remaining = (expires_at.astimezone(UTC) - datetime.now(UTC)).total_seconds()
+                if remaining <= 0:
+                    raise DeadlineExceeded("GPU 租约在运行开始前已过期")
+                deadline = min(deadline, now + remaining)
+        self._deadline = deadline
+
+    def _check_deadline(self) -> None:
+        if self._deadline is not None and time.monotonic() >= self._deadline:
+            raise DeadlineExceeded("GPU 独占窗口已用尽（租约或 max_duration_s），运行中止")
+
+    def _settle(self) -> None:
+        seconds = float(self.config.settle_s)
+        if seconds <= 0:
+            return
+        self._check_deadline()
+        if self._deadline is not None:
+            seconds = min(seconds, max(0.0, self._deadline - time.monotonic()))
+        time.sleep(seconds)
+        self._check_deadline()
+
+    def _take_over_loaded_models(self) -> dict[str, object]:
+        loaded = sorted(set(self.client.loaded_models()))
+        takeover: dict[str, object] = {
+            "previously_loaded": loaded,
+            "unloaded": [],
+            "restored": False,
+        }
+        if not loaded:
+            return takeover
+        if not self.config.allow_unload_loaded:
+            raise SafetyError(
+                "检测到已驻留模型 "
+                f"{loaded}；默认拒绝卸载。仅在租约列出这些模型并明确同意后使用 "
+                "--allow-unload-loaded。"
+            )
+        unloaded = []
+        for name in loaded:
+            unloaded.append(self.client.unload(name))
+        takeover["unloaded"] = unloaded
+        return takeover
 
     def _overall_status(
         self,
@@ -347,12 +433,6 @@ class BenchmarkRunner:
         preflight: dict[str, object],
     ) -> list[dict[str, object]]:
         model_id = str(model["id"])
-        loaded = sorted(set(self.client.loaded_models()))
-        model["previously_loaded"] = loaded
-        unloaded = []
-        for name in loaded:
-            unloaded.append(self.client.unload(name))
-        model["preload_cleanup"] = unloaded
         runs: list[dict[str, object]] = []
         try:
             for repetition in range(self.config.cold_repetitions):
@@ -366,6 +446,8 @@ class BenchmarkRunner:
                 runs.append(warmup)
                 if not warmup.get("success"):
                     return runs
+            # The model is loaded now; let it settle before the warm samples.
+            self._settle()
             for case in cases:
                 for repetition in range(self.config.warm_repetitions):
                     run = self._run_chat(model_id, case, "warm", repetition)
@@ -390,6 +472,7 @@ class BenchmarkRunner:
         phase: str,
         repetition: int,
     ) -> dict[str, object]:
+        self._check_deadline()
         self._run_counter += 1
         run_index = self._run_counter
         num_predict = case.max_tokens or self.config.options.num_predict
@@ -430,6 +513,7 @@ class BenchmarkRunner:
                 think=self.config.options.think,
                 timeout_s=self.config.timeout_s,
             ):
+                self._check_deadline()
                 chunk_count += 1
                 message = chunk.get("message")
                 if isinstance(message, dict):
@@ -471,6 +555,8 @@ class BenchmarkRunner:
                 memory["model_size_vram_mib"] = round(float(size_vram) / (1024.0**2), 3)
             if isinstance(size, (int, float)):
                 memory["model_size_mib"] = round(float(size) / (1024.0**2), 3)
+        else:
+            memory["model_size_source"] = "target_not_in_api_ps"
         content = "".join(content_parts)
         success = error is None and bool(content)
         if error is None and not content:
@@ -508,7 +594,8 @@ class BenchmarkRunner:
         for entry in entries:
             if entry.get("name") == model or entry.get("model") == model:
                 return entry
-        return entries[0] if entries else None
+        # Never attribute another resident model's memory to this target.
+        return None
 
 
 def _safe_error(exc: BaseException) -> str:

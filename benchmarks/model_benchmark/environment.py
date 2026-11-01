@@ -92,7 +92,6 @@ def parse_gpu_csv(text: str) -> dict[str, object]:
             "utilization_percent": _optional_number(row[5]),
             "temperature_c": _optional_number(row[6]),
             "driver_version": row[7].strip(),
-            "uuid": row[8].strip(),
         }
     return {"available": False, "error": "nvidia-smi returned no GPU row"}
 
@@ -238,7 +237,6 @@ def query_os() -> dict[str, object]:
         "version": platform.version(),
         "platform": platform.platform(),
         "python": sys.version.split()[0],
-        "python_executable": sys.executable,
     }
 
 

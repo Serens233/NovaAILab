@@ -11,16 +11,17 @@
 | `generated_at` | 环境采集时间 |
 | `status` | `completed` / `partial` / `failed` / `blocked` |
 | `baseline` | 基准 commit、分支、是否 dirty、显式基准 SHA |
-| `config` | 本次模型、样例、上下文、采样、超时、租约路径 |
-| `environment` | OS/CPU/内存/GPU/Git/Ollama |
+| `config` | 本次模型、样例、上下文、采样、超时、租约路径；路径已脱敏为相对路径或 `<external>/<basename>` |
+| `environment` | OS/CPU/内存/GPU/Git/Ollama；不含 `python_executable`、GPU UUID |
 | `models` | 模型标识、digest、量化、默认参数、能力、准入结果 |
 | `cases` | 固定样例 SHA-256 与完整合成样例 |
 | `runs` | 一次请求一行 |
 | `suite_results` | 已执行套件的状态 |
 | `summary` | 按模型聚合的冷/热/内存统计 |
 | `limitations` | 本次真实限制 |
-| `preflight` | 预检 checks 和 warning |
-| `error` | 整体错误（如适用） |
+| `takeover` | `{previously_loaded, unloaded, restored}`；默认空，只有显式接管时才有内容 |
+| `preflight` | 预检 checks 和 warning；租约只保留调度字段 |
+| `error` | 整体错误（如适用）；超时为 `blocked` 并在此记录原因 |
 
 ## `models[]`
 
@@ -53,7 +54,7 @@
 | `started_at` | 请求开始时间 |
 | `timings` | 见下表 |
 | `memory` | 见下表 |
-| `response` | 字符数、SHA-256、截断预览、thinking 字符数、chunk 数、done_reason |
+| `response` | 字符数、SHA-256、thinking 字符数、chunk 数、done_reason；预览默认 `null`，加 `--preview` 才写前 120 字符 |
 | `request` | 采样参数、`num_ctx`、`num_predict`、`think`、messages 哈希 |
 | `error` | 失败原因；成功为 `null` |
 

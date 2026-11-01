@@ -12,16 +12,18 @@ from . import __version__
 from .cases import load_cases
 from .config import (
     DEFAULT_CASES_PATH,
-    DEFAULT_GAME_PROCESSES,
     DEFAULT_MODELS,
     DEFAULT_OUTPUT_DIR,
+    REPO_ROOT,
     BenchmarkConfig,
 )
 from .environment import collect_environment, iso_now
+from .nova_policy import NovaPolicyError, load_policy
 from .ollama_client import OllamaClient, OllamaError
 from .report import write_inventory
 from .runner import BenchmarkRunner, describe_models
 from .safety import SafetyError, check_preflight
+from .sanitize import sanitize_config, sanitize_environment
 from .suites import list_suites
 
 
@@ -42,9 +44,7 @@ def _build_config(args: argparse.Namespace) -> BenchmarkConfig:
     lease_path = Path(args.lease).resolve() if getattr(args, "lease", None) else None
     nova_state = Path(args.nova_state).resolve() if getattr(args, "nova_state", None) else None
     lock_path = Path(args.lock).resolve() if getattr(args, "lock", None) else None
-    game_processes = (
-        tuple(args.game_process) if getattr(args, "game_process", None) else DEFAULT_GAME_PROCESSES
-    )
+    game_processes = tuple(args.game_process) if getattr(args, "game_process", None) else ()
     baseline = getattr(args, "baseline_commit", None) or os.environ.get(
         "NOVA_BENCH_BASELINE_COMMIT"
     )
@@ -63,11 +63,13 @@ def _build_config(args: argparse.Namespace) -> BenchmarkConfig:
         max_duration_s=args.max_seconds,
         game_processes=game_processes,
         allow_experimental=args.allow_experimental,
+        allow_unload_loaded=getattr(args, "allow_unload_loaded", False),
         baseline_commit=baseline,
         lease_path=lease_path,
         nova_state_path=nova_state,
         lock_path=lock_path,
-        include_preview=not args.no_preview,
+        include_preview=bool(getattr(args, "preview", False))
+        and not bool(getattr(args, "no_preview", False)),
         execute=getattr(args, "execute", False),
     )
 
@@ -84,11 +86,26 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--sample-interval", type=float, default=0.5)
     parser.add_argument("--max-seconds", type=float, default=900.0)
     parser.add_argument("--baseline-commit", default=None)
-    parser.add_argument("--nova-state", default=None, help="optional Nova gpu-mode.json")
+    parser.add_argument(
+        "--nova-state",
+        default=None,
+        help="Nova gpu-mode.json; defaults to the path from Nova settings",
+    )
     parser.add_argument("--game-process", action="append", default=None)
     parser.add_argument("--lock", default=None)
-    parser.add_argument("--no-preview", action="store_true")
+    parser.add_argument(
+        "--preview", action="store_true", help="store a short reply preview (off by default)"
+    )
+    parser.add_argument("--no-preview", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--allow-experimental", action="store_true")
+    parser.add_argument(
+        "--allow-unload-loaded",
+        action="store_true",
+        help=(
+            "allow evicting models already resident in Ollama; requires a lease that "
+            "explicitly lists them and --execute"
+        ),
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -139,9 +156,10 @@ def cmd_inventory(args: argparse.Namespace) -> int:
     client = OllamaClient(config.ollama_url, timeout_s=min(config.timeout_s, 60.0))
     environment = collect_environment(Path.cwd())
     try:
+        policy = load_policy(REPO_ROOT)
         environment["ollama"] = client.version()
-        models = describe_models(client, config, environment)
-    except (OllamaError, ValueError) as exc:
+        models = describe_models(client, config, environment, policy)
+    except (OllamaError, NovaPolicyError, ValueError) as exc:
         _json_print({"status": "error", "error": f"{type(exc).__name__}: {exc}"})
         return 2
     cases = load_cases(config.cases_path, config.case_ids)
@@ -183,8 +201,8 @@ def cmd_preflight(args: argparse.Namespace) -> int:
     _json_print(
         {
             "ok": report["ok"],
-            "config": config.as_dict(),
-            "environment": environment,
+            "config": sanitize_config(config.as_dict()),
+            "environment": sanitize_environment(environment),
             "checks": report["checks"],
             "warnings": report["warnings"],
             "loaded_models": report["loaded_models"],
@@ -218,8 +236,8 @@ def cmd_run(args: argparse.Namespace) -> int:
             "status": "blocked",
             "error": f"{type(exc).__name__}: {exc}",
             "at": iso_now(),
-            "config": config.as_dict(),
-            "environment": environment,
+            "config": sanitize_config(config.as_dict()),
+            "environment": sanitize_environment(environment),
         }
         (blocked_dir / "blocked.json").write_text(
             json.dumps(document, ensure_ascii=False, indent=2, default=str) + "\n",

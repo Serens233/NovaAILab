@@ -7,26 +7,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = PACKAGE_ROOT.parents[1]
 DEFAULT_CASES_PATH = PACKAGE_ROOT / "cases" / "performance_zh.json"
 DEFAULT_OUTPUT_DIR = PACKAGE_ROOT / "results"
 DEFAULT_MODELS = ("qwen3.5:9b", "qwen3.5:4b")
-DEFAULT_GAME_PROCESSES = (
-    "cs2.exe",
-    "dota2.exe",
-    "overwatch.exe",
-    "eldenring.exe",
-    "cyberpunk2077.exe",
-    "reddeadredemption2.exe",
-    "gta5.exe",
-)
-EXPERIMENTAL_MODEL_PREFIX = "qwen3.8:27b"
+# The game list is owned by Nova (NOVA_GPU_GAME_PROCESSES or its auto detector).
+# Guessing popular executables here would either miss a game or unload during
+# an unrelated process; an explicit --game-process is required when Nova has no
+# configured list and no detector.
+DEFAULT_GAME_PROCESSES: tuple[str, ...] = ()
 
 MODEL_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:-]{0,127}\Z")
-
-# Nova refuses to load the 27B model below these admission thresholds.  The
-# benchmark mirrors that safety rule instead of trying to force a load.
-EXPERIMENTAL_MIN_TOTAL_RAM_MIB = 28672
-EXPERIMENTAL_MIN_AVAILABLE_RAM_MIB = 12288
 
 
 @dataclass(frozen=True)
@@ -79,11 +70,12 @@ class BenchmarkConfig:
     max_duration_s: float = 900.0
     game_processes: tuple[str, ...] = DEFAULT_GAME_PROCESSES
     allow_experimental: bool = False
+    allow_unload_loaded: bool = False
     baseline_commit: str | None = None
     lease_path: Path | None = None
     nova_state_path: Path | None = None
     lock_path: Path | None = None
-    include_preview: bool = True
+    include_preview: bool = False
     preview_chars: int = 120
     execute: bool = False
     options: SamplingOptions = field(default_factory=SamplingOptions)
@@ -125,6 +117,10 @@ class BenchmarkConfig:
             raise ValueError("num_predict must be between 1 and 2048")
         if self.execute and self.lease_path is None:
             raise ValueError("execute mode requires a GPU lease file")
+        if self.allow_unload_loaded and not self.execute:
+            raise ValueError("allow_unload_loaded is only valid together with --execute")
+        if self.allow_unload_loaded and self.lease_path is None:
+            raise ValueError("allow_unload_loaded requires a GPU lease file")
         if self.baseline_commit is not None and (
             len(self.baseline_commit) != 40
             or any(char not in "0123456789abcdef" for char in self.baseline_commit)
@@ -151,6 +147,7 @@ class BenchmarkConfig:
             "max_duration_s": self.max_duration_s,
             "game_processes": list(self.game_processes),
             "allow_experimental": self.allow_experimental,
+            "allow_unload_loaded": self.allow_unload_loaded,
             "baseline_commit": self.baseline_commit,
             "lease_path": str(self.lease_path) if self.lease_path else None,
             "nova_state_path": str(self.nova_state_path) if self.nova_state_path else None,
@@ -159,7 +156,3 @@ class BenchmarkConfig:
             "execute": self.execute,
             "options": self.options.as_dict(),
         }
-
-
-def is_experimental_model(model: str) -> bool:
-    return model.casefold().startswith(EXPERIMENTAL_MODEL_PREFIX.casefold())

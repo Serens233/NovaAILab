@@ -15,12 +15,12 @@
       "qwen3.5:4b",
       "qwen3.5:9b"
     ],
-    "cases_path": "E:\\NovaAILab\\worktrees\\nova-dsh-model-benchmark\\benchmarks\\model_benchmark\\cases\\performance_zh.json",
+    "cases_path": "benchmarks/model_benchmark/cases/performance_zh.json",
     "case_ids": [],
     "suite": "performance",
     "warm_repetitions": 3,
     "cold_repetitions": 1,
-    "output_dir": "E:\\NovaAILab\\worktrees\\nova-dsh-model-benchmark\\benchmarks\\model_benchmark\\results",
+    "output_dir": "benchmarks/model_benchmark/results",
     "timeout_s": 180.0,
     "settle_s": 1.0,
     "sample_interval_s": 0.5,
@@ -38,7 +38,7 @@
     ],
     "allow_experimental": false,
     "baseline_commit": "3bb0f6a7ffe868be1dc014772601fe41fa9036a6",
-    "lease_path": "E:\\NovaAILab\\logs\\model-benchmark-lease-20261101.json",
+    "lease_path": "<lease>/model-benchmark-lease-20261101.json",
     "nova_state_path": null,
     "include_preview": true,
     "preview_chars": 120,
@@ -64,8 +64,7 @@
       "release": "11",
       "version": "10.0.26100",
       "platform": "Windows-11-10.0.26100-SP0",
-      "python": "3.14.10",
-      "python_executable": "C:\\Users\\Administrator\\Documents\\Codex\\AI-Workspace\\nova\\.venv\\Scripts\\python.exe"
+      "python": "3.14.10"
     },
     "cpu": {
       "name": "AMD Ryzen 7 9700X 8-Core Processor",
@@ -88,7 +87,6 @@
       "utilization_percent": 4,
       "temperature_c": 37.81,
       "driver_version": "621.01",
-      "uuid": "GPU-c7b71b16-979d-c15b-583b-b49c97460e42",
       "nvidia_smi_version": "621.01"
     },
     "compute_apps": [],
@@ -3242,13 +3240,12 @@
         "detail": {
           "granted_by": "user via DSH chat approval at 2026-11-01T22:59+08:00",
           "expires_at": "2026-11-01T23:40:00+08:00",
-          "remaining_s": 2389.8,
           "models": [
             "qwen3.5:4b",
             "qwen3.5:9b"
           ],
           "max_seconds": 900,
-          "note": "exclusive GPU window; no games or other GPU benchmarks; unload after run"
+          "remaining_s": 2389.8
         }
       }
     ],
@@ -3257,13 +3254,12 @@
     "lease": {
       "granted_by": "user via DSH chat approval at 2026-11-01T22:59+08:00",
       "expires_at": "2026-11-01T23:40:00+08:00",
-      "remaining_s": 2389.8,
       "models": [
         "qwen3.5:4b",
         "qwen3.5:9b"
       ],
       "max_seconds": 900,
-      "note": "exclusive GPU window; no games or other GPU benchmarks; unload after run"
+      "remaining_s": 2389.8
     }
   }
 }

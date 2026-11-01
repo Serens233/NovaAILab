@@ -43,6 +43,6 @@ line-ending = "lf"
 
 [tool.pytest.ini_options]
 minversion = "9.0"
-testpaths = ["tests"]
+testpaths = ["tests", "benchmarks/model_benchmark/tests"]
 addopts = "-ra --strict-config --strict-markers --import-mode=importlib"
 

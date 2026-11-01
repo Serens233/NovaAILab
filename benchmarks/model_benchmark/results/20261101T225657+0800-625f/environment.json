@@ -7,8 +7,7 @@
     "release": "11",
     "version": "10.0.26100",
     "platform": "Windows-11-10.0.26100-SP0",
-    "python": "3.14.10",
-    "python_executable": "C:\\Users\\Administrator\\Documents\\Codex\\AI-Workspace\\nova\\.venv\\Scripts\\python.exe"
+    "python": "3.14.10"
   },
   "cpu": {
     "name": "AMD Ryzen 7 9700X 8-Core Processor",
@@ -31,7 +30,6 @@
     "utilization_percent": 4,
     "temperature_c": 45.09,
     "driver_version": "621.01",
-    "uuid": "GPU-c7b71b16-979d-c15b-583b-b49c97460e42",
     "nvidia_smi_version": "621.01"
   },
   "compute_apps": [],

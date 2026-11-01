@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .cases import TestCase, cases_as_dict, cases_sha256
 from .metrics import stats
+from .sanitize import sanitize_environment, sanitize_payload
 
 _METRIC_PATHS = {
     "ttft_ms": ("timings", "ttft_ms"),
@@ -514,6 +515,7 @@ def write_csv(path: Path, runs: list[dict[str, object]]) -> None:
 
 def write_outputs(run_dir: Path, payload: dict[str, object], cases: list[TestCase]) -> list[Path]:
     run_dir.mkdir(parents=True, exist_ok=True)
+    payload = sanitize_payload(payload)
     paths = [
         run_dir / "results.json",
         run_dir / "environment.json",
@@ -580,6 +582,7 @@ def write_inventory(
     cases: list[TestCase],
 ) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
+    environment = sanitize_environment(environment)
     inventory = {
         "schema_version": "1.0",
         "captured_at": environment.get("captured_at"),

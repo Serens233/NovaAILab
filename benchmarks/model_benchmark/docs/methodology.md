@@ -48,6 +48,17 @@
 - `ollama.exe` 与 `ollama_llama_server.exe` / `llama-server.exe` 的工作集、私有字节通过 Windows `GetProcessMemoryInfo` 采样；失败时回退到 `psutil`（若安装），再失败则标记 `process_source="unavailable"`。
 - 记录基线、峰值、系统可用最低值。
 
+## 安全门禁与统一窗口
+
+- 真实运行必须有租约；`max_duration_s` 不能超过租约的 `max_seconds`。
+- 运行开始前读取 Nova 的 `gpu-mode.json`；Nova 已启用 GPU 管理但状态文件读不到时失败关闭。
+- 游戏名单来自 `NOVA_GPU_GAME_PROCESSES` 或显式 `--game-process`；进程枚举失败视为不能确认无游戏。
+- 默认不驱逐 `/api/ps` 中已有的模型；只有租约列出这些模型并显式 `--allow-unload-loaded` 时才接管，结束后不恢复。
+- 从租约到期时间和 `--max-seconds` 取较早者作为硬截止线；每个请求前后和流式响应过程中检查，超时中止并写 `status=blocked` 结果。
+- 27B 准入阈值直接读取 Nova settings（`NOVA_QWEN38_MIN_*`），不在 benchmark 里另存一套数字。
+- 冷启动完成后按 `--settle` 等待（默认 1 秒）再开始热启动采样，避免把加载后的瞬时状态混入热启动统计。
+- 默认不保存回复预览；`--preview` 只保存前 120 字符。
+
 ## 统计与报告
 
 - 每个模型一次冷启动（`cold_repetitions=1`）。

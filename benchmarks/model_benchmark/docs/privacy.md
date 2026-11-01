@@ -20,17 +20,16 @@
 
 - 可见回复字符数；
 - 回复 SHA-256；
-- 前 120 个字符的截断预览；
 - thinking 字符数。
 
-不保存完整回复、完整思考内容或原始 NDJSON 流。若预览可能包含敏感内容，使用 `--no-preview` 关闭。
+不保存完整回复、完整思考内容或原始 NDJSON 流。只有显式加 `--preview` 才额外保存前 120 个字符的截断预览；即使如此也不保存完整输出。
 
 ## 进程与硬件
 
 - `nvidia-smi` 整卡显存、利用率、温度、驱动版本：必要硬件事实。
 - Ollama/llama 进程工作集与私有字节：只针对模型服务。
 - 其他 GPU compute 进程：只记录数量，不记录名称/PID。
-- 用户路径只在 `python_executable` 等少量环境字段中出现；提交前仍应审查。
+- 写盘前统一脱敏：配置路径转为仓库相对路径或 `<external>/<basename>`，`python_executable` 和 GPU UUID 不写入结果，租约只保留 `granted_by`/`expires_at`/`models`/`max_seconds` 等调度字段。
 
 ## 提交前审查
 
