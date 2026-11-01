@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from benchmarks.model_benchmark.config import REPO_ROOT
 from benchmarks.model_benchmark.nova_policy import load_policy
-from nova.config import Settings
+from nova.config import load_settings
 
 
 def test_thresholds_and_tag_family_come_from_nova_settings() -> None:
     policy = load_policy(REPO_ROOT)
-    settings = Settings(_env_file=None)
+    settings = load_settings(REPO_ROOT / ".env")
     assert policy.canonical_model == settings.qwen38_model
     assert policy.min_total_ram_mib == settings.qwen38_min_total_ram_mib
     assert policy.min_available_ram_mib == settings.qwen38_min_available_ram_mib
