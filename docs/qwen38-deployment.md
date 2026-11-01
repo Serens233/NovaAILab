@@ -1,6 +1,6 @@
 # Nova V3：Qwen3.8-27B 实验接入
 
-2026-11-01，Asia/Shanghai。**27B权重已于22:19下载并导入本机Ollama，实际标签为 `qwen3.8:27b-q3_k_xl`；模型接口已支持该标签的识别、规范别名映射和门禁拒绝，但尚未执行真实27B推理；本机16GB内存按设计拒绝加载。Git仍无remote和提交身份，当前只有本地基线提交 `3bb0f6a` 与功能分支。** 不将本阶段标为完整部署成功。模型接口契约与实测记录见 [Phase 1 契约](phase1-contract.md)。
+2026-11-01，Asia/Shanghai。**27B权重已于22:19下载并导入本机Ollama，实际标签为 `qwen3.8:27b-q3_k_xl`；模型接口已支持该标签的识别、规范别名映射和门禁拒绝，但尚未执行真实27B推理；本机16GB内存按设计拒绝加载。Git已建立远程 `Serens233/NovaAILab`；主会话已推送基线/功能分支并创建 PR #1/#2（draft），未合并 main。** 不将本阶段标为完整部署成功。模型接口契约与实测记录见 [Phase 1 契约](phase1-contract.md)。
 
 ## 实际环境与审计
 
@@ -94,17 +94,17 @@ Get-Content 'E:\NovaAILab\logs\nova-v3-20261101\pull-retry-utf8.log' -Tail 3
 | 真实安全检查 | Windows/NVIDIA/Ollama真实采集+ASGI接口14项通过；流式/JSON实验请求409，GAMING请求/wake423，健康200，模型始终未加载，数据库正常关闭 |
 | 模拟27B集成 | 配置、参数透传、原提示词、多轮、SSE/JSON、低RAM/遥测未知、游戏/取消竞态、失败锁定及9B/4B回退通过 |
 
-### 2026-11-01 23:50 DS-A 模型接口复核
+### 2026-11-01 22:47–22:52 DS-A 模型接口复核
 
 | 检查 | 实际结果 |
 | --- | --- |
 | 模型接口目标回归 | `tests/test_router_*`、`test_gpu_chat_stream.py`、`test_chat_cloud.py`：156 passed、0 failed、6.96s |
 | 全量回归 | `pytest -ra`：757 passed、4 failed、0 skipped、13.74s；4 个失败均在 DS-A 文件所有权外，明细与接口变更请求见 [Phase 1 契约](phase1-contract.md) |
-| 真实只读 Ollama | 持有 `.gpu.lock`，前后 `/api/ps` 为空；识别 `qwen3.8:27b-q3_k_xl`，16GB 下返回 `MODEL_RAM_INSUFFICIENT`，未加载模型；32GiB 替身下规范名映射到实际标签；证据 `E:\NovaAILab\logs\nova-v30-ds-a-20261101-2350\` |
+| 真实只读 Ollama | 持有 `.gpu.lock`，前后 `/api/ps` 为空；识别 `qwen3.8:27b-q3_k_xl`，16GB 下返回 `MODEL_RAM_INSUFFICIENT`，未加载模型；32GiB 替身下规范名映射到实际标签；证据 `E:\NovaAILab\logs\nova-v30-ds-a-20261101-2251\` |
 | Ruff | 改动文件静态与格式检查退出码 0 |
 
 真实安全检查不是27B推理。中文生成、实际首Token延迟、tokens/s、加载时间、CPU/GPU分配比例及27B带载卸载均**待内存升级后测试**，性能数据保持null，不用9B数据代替。后端已保留eval_duration和tokens/s统计能力。没有训练、Strata安装、权重修改、驱动修改或付费API调用。
 
 ## Git交付状态
 
-2026-11-01 23:05 主会话已建立首个本地基线提交 `3bb0f6a`（tag `dsh-baseline-20261101`）；DS-A 在其上创建 `feature/dsh-model-router` 与独立 worktree `E:\NovaAILab\worktrees\nova-dsh-model-router`。当前仍无 remote、GitHub 仓库 URL 和用户提交身份；本分支只做本地提交，不推送、不合并 main，也不能虚构 PR 链接。合并继续由用户/主会话确认。
+2026-11-01 22:44 主会话建立首个本地基线提交 `3bb0f6a`（tag `dsh-baseline-20261101`）；DS-A 在其上创建 `feature/dsh-model-router` 与独立 worktree `E:\NovaAILab\worktrees\nova-dsh-model-router`。用户随后提供远程 `https://github.com/Serens233/NovaAILab`；主会话于 23:03–23:04 推送 `baseline/v3.0-phase1`、`feature/dsh-model-router` 等分支并创建 PR #1–#4，其中本任务为 PR #2（draft，base `baseline/v3.0-phase1`）。未合并 main；合并顺序与改基由主会话/用户确认。

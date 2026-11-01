@@ -4,7 +4,8 @@
 - 基准 Commit：`3bb0f6a`（tag `dsh-baseline-20261101`）
 - 工作分支：`feature/dsh-model-router`
 - 独立 worktree：`E:\NovaAILab\worktrees\nova-dsh-model-router`
-- 记录时间：2026-11-01 23:50（Asia/Shanghai）
+- 远程仓库：`https://github.com/Serens233/NovaAILab`；PR #2（draft，base `baseline/v3.0-phase1`，head `feature/dsh-model-router`）
+- 记录时间：2026-11-01 22:47–22:52（Asia/Shanghai）；PR #2 由主会话于 23:04 创建
 - 结论口径：只记录实际执行的命令和结果；未执行、失败和超出本任务文件所有权的事项分别列出。
 
 ## 1. 本任务范围
@@ -98,7 +99,7 @@
 
 ### 5.1 真实 Ollama 只读验证
 
-证据目录：`E:\NovaAILab\logs\nova-v30-ds-a-20261101-2350\`（`real-ollama-contract.json`、`real-ollama-contract.log`）。执行时持有 `E:\NovaAILab\worktrees\.gpu.lock`，前后 `/api/ps` 均为空；只调用 `/api/tags` 和内存读取，没有加载模型。
+证据目录：`E:\NovaAILab\logs\nova-v30-ds-a-20261101-2251\`（`real-ollama-contract.json`、`real-ollama-contract.log`）。执行时持有 `E:\NovaAILab\worktrees\.gpu.lock`，前后 `/api/ps` 均为空；只调用 `/api/tags` 和内存读取，没有加载模型。
 
 实际结果：
 
