@@ -129,3 +129,23 @@ VPS 部署阶段再引入进程管理、TLS、身份验证、备份与恢复演�
 - 标准库 sqlite3 会话显式提交或回滚并在所有路径关闭连接；同一连接的完整操作在同一线程执行，异步入口把整个同步操作移到线程。
 - 初始化只准备必要目录和数据库元数据，`PRAGMA application_id=0x4E4F5641` 标识 Nova，初始 `user_version=1`，不创建业务表。重复初始化幂等；未知非空结构、损坏文件或不支持的版本应拒绝，不自动清空、改写或降级外部数据。
 - 没有确定 ORM 或迁移框架，当前也不需要引入。首次业务 schema 变更再评估迁移方案；任何破坏性操作仍需备份与明确授权。
+
+## V3 模型路由与传输（Phase 1）
+
+聊天生成仍由 `POST /api/v1/chat` 进入；路由层只负责协议，不直接访问 Provider：
+
+```text
+POST /api/v1/chat
+  -> ChatService（历史、幂等、SSE事件队列）
+  -> ModelRegistry.resolve（启用/内存门禁 -> /api/tags -> 实际标识 -> 资源策略）
+  -> GpuManager.open_chat_stream（准入、预检、显存/游戏/训练门禁）
+  -> OllamaBackend.stream_chat（NDJSON、思考隔离、总时限、取消）
+  -> SSE: meta / delta / done / error
+```
+
+- **注册表**：稳定模型仍为 `qwen3.5:9b`、`qwen3.5:4b`；DeepSeek 为显式云端项。实验 27B 只接受规范名 `qwen3.8:27b`、本机严格后缀族 `qwen3.8:27b-<suffix>` 和 `hf.co/unsloth/Qwen3.8-27B-GGUF:<tag>`；`:cloud`/`-cloud` 与其他仓库永不成为别名。规范名解析到实际已安装标识，所有实际别名共享同一 RAM/参数策略。
+- **门禁顺序**：实验开关和系统内存检查先于 `/api/tags` 查询；不足时既不查询目录，也不驱逐常驻模型。注册表只读发现，不下载、不加载；实际加载仍由唯一 `GpuManager` 决定。
+- **思考隔离**：Ollama 的 `message.thinking` 不进入正文、回调或存储；正文中的显式 `think/thinking/analysis/reasoning` 标签由 `AnswerFilter` 增量剥离，未闭合/不平衡即失败。DeepSeek 的 `reasoning_content` 同理。思考内容不能替代用户可见回复，只有正文为空或流未完成时判失败。
+- **失败语义**：目录畸形/超量、非法 NDJSON、缺 `done`、空正文、超限、超时、取消和未闭合标签都返回固定公开错误，不携带上游原文、prompt、回复或密钥；取消只中断当前 socket，仍需管理器复核模型卸载，不能把客户端断开当作显存已释放。
+- **超时与取消**：绝对 deadline 覆盖整个流，慢速分块不能重置；`StreamControl` 以 socket shutdown 唤醒阻塞读取，并在取消后等待 HTTP 线程结束。云端使用固定 HTTPS 目标、180 秒总时限和 2 MiB 上限。
+- **接口边界**：`ModelBackend` 仅声明注册表所需的最小异步方法；本阶段不引入 SDK、微服务或 Agent 框架，也没有绕过 `GpuManager` 的 Provider 入口。

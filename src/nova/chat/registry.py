@@ -16,11 +16,17 @@ _LOCAL_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]*(?::[A-Za-z0-9._-]+)?\Z")
 _QWEN38_GGUF = re.compile(
     r"hf\.co/unsloth/Qwen3\.8-27B-GGUF:[A-Za-z0-9][A-Za-z0-9._-]*\Z", re.IGNORECASE
 )
+# 本机导入的量化标签形如 qwen3.8:27b-q3_k_xl；后缀仍走同一RAM/启用策略。
+_QWEN38_LOCAL = re.compile(r"qwen3\.8:27b-[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z", re.IGNORECASE)
 
 
 def _qwen38_alias(name):
-    return not name.casefold().endswith((":cloud", "-cloud")) and (
-        name.casefold() == "qwen3.8:27b" or bool(_QWEN38_GGUF.fullmatch(name))
+    if not isinstance(name, str) or name.casefold().endswith((":cloud", "-cloud")):
+        return False
+    return (
+        name.casefold() == "qwen3.8:27b"
+        or bool(_QWEN38_LOCAL.fullmatch(name))
+        or bool(_QWEN38_GGUF.fullmatch(name))
     )
 
 
@@ -117,14 +123,29 @@ class ModelRegistry:
             ),
         )
 
+    def _is_experimental(self, name):
+        return isinstance(name, str) and (
+            name.casefold() == self.policy["model"].casefold() or _qwen38_alias(name)
+        )
+
+    def _require_experiment_enabled(self):
+        if not self.policy["enabled"]:
+            raise ApplicationError(
+                "MODEL_EXPERIMENT_DISABLED", "27B实验模型尚未启用，请使用9B或4B", 503
+            )
+
     async def resolve(self, model=None):
         """解析请求的实际本地标识；None保留稳定默认，不静默升级至27B。"""
-        await self.refresh()
         requested = self.settings.chat_default_model if model is None else model
+        # 开关与RAM门禁必须先于/api/tags查询：不足时不得接触Ollama或驱逐常驻模型。
+        if self._is_experimental(requested):
+            self._require_experiment_enabled()
+            require_system_memory(
+                self.policy["min_total_ram_mib"], self.policy["min_available_ram_mib"]
+            )
+        await self.refresh()
         model = requested
-        if isinstance(model, str) and (
-            model.casefold() == self.policy["model"].casefold() or _qwen38_alias(model)
-        ):
+        if self._is_experimental(model):
             installed = self._installed_experiments()
             if model not in self.installed and installed:
                 model = installed[0]
@@ -148,10 +169,8 @@ class ModelRegistry:
     def get(self, model):
         if not isinstance(model, str) or model not in self.entries:
             raise ApplicationError("MODEL_UNKNOWN", "请选择 Nova 已注册的模型", 422)
-        if self.entries[model].get("experimental") and not self.policy["enabled"]:
-            raise ApplicationError(
-                "MODEL_EXPERIMENT_DISABLED", "27B实验模型尚未启用，请使用9B或4B", 503
-            )
+        if self.entries[model].get("experimental"):
+            self._require_experiment_enabled()
         return {"id": model, **self.entries[model]}
 
     def cloud_ready(self):
