@@ -139,7 +139,10 @@ def check_config() -> list[str]:
         errors.append("应用模块名必须为 nova")
     if config["tool"]["ruff"].get("target-version") != "py314":
         errors.append("Ruff 目标 Python 版本不一致")
-    if config["tool"]["pytest"]["ini_options"].get("testpaths") != ["tests"]:
+    if config["tool"]["pytest"]["ini_options"].get("testpaths") != [
+        "tests",
+        "benchmarks/model_benchmark/tests",
+    ]:
         errors.append("pytest 测试目录配置不一致")
     package_versions = {
         package["name"]: package.get("version") for package in lock.get("package", [])

@@ -1,0 +1,2136 @@
+{
+  "schema_version": "1.0",
+  "run_id": "20261101T225657+0800-625f",
+  "generated_at": "2026-11-01T22:56:56+08:00",
+  "status": "partial",
+  "baseline": {
+    "commit": "11866bfce23871cebd6c109301b97e006cccdfed",
+    "branch": "experiment/dsh-model-benchmark",
+    "dirty": false,
+    "baseline_commit": "3bb0f6a7ffe868be1dc014772601fe41fa9036a6"
+  },
+  "config": {
+    "ollama_url": "http://127.0.0.1:11434",
+    "models": [
+      "qwen3.5:4b",
+      "qwen3.5:9b"
+    ],
+    "cases_path": "benchmarks/model_benchmark/cases/performance_zh.json",
+    "case_ids": [],
+    "suite": "performance",
+    "warm_repetitions": 3,
+    "cold_repetitions": 1,
+    "output_dir": "benchmarks/model_benchmark/results",
+    "timeout_s": 180.0,
+    "settle_s": 1.0,
+    "sample_interval_s": 0.5,
+    "min_free_vram_mib": 2048,
+    "min_available_ram_mib": 2048,
+    "max_duration_s": 900.0,
+    "game_processes": [
+      "cs2.exe",
+      "dota2.exe",
+      "overwatch.exe",
+      "eldenring.exe",
+      "cyberpunk2077.exe",
+      "reddeadredemption2.exe",
+      "gta5.exe"
+    ],
+    "allow_experimental": false,
+    "baseline_commit": "3bb0f6a7ffe868be1dc014772601fe41fa9036a6",
+    "lease_path": "<lease>/model-benchmark-lease-20261101.json",
+    "nova_state_path": null,
+    "include_preview": true,
+    "preview_chars": 120,
+    "execute": true,
+    "options": {
+      "num_ctx": 4096,
+      "num_predict": 128,
+      "temperature": 0.2,
+      "top_p": 0.9,
+      "top_k": 40,
+      "seed": 42,
+      "repeat_penalty": 1.1,
+      "presence_penalty": 0.0,
+      "think": false
+    }
+  },
+  "environment": {
+    "captured_at": "2026-11-01T22:56:56+08:00",
+    "timezone": "中国标准时间",
+    "benchmark_version": "0.1.0",
+    "os": {
+      "system": "Windows",
+      "release": "11",
+      "version": "10.0.26100",
+      "platform": "Windows-11-10.0.26100-SP0",
+      "python": "3.14.10"
+    },
+    "cpu": {
+      "name": "AMD Ryzen 7 9700X 8-Core Processor",
+      "logical_processors": 16,
+      "machine": "AMD64"
+    },
+    "memory": {
+      "total_mib": 15477.3,
+      "available_mib": 3634.1,
+      "used_mib": 11843.2,
+      "load_percent": 76
+    },
+    "gpu": {
+      "available": true,
+      "index": 0,
+      "name": "NVIDIA GeForce RTX 5060 Ti",
+      "memory_total_mib": 16311,
+      "memory_used_mib": 2089,
+      "memory_free_mib": 13962,
+      "utilization_percent": 4,
+      "temperature_c": 45.09,
+      "driver_version": "621.01",
+      "nvidia_smi_version": "621.01"
+    },
+    "compute_apps": [],
+    "compute_apps_other_count": 25,
+    "compute_apps_note": "only Ollama/llama processes are retained; per-process VRAM may be N/A",
+    "git": {
+      "commit": "11866bfce23871cebd6c109301b97e006cccdfed",
+      "branch": "experiment/dsh-model-benchmark",
+      "dirty": false,
+      "dirty_entries": 0,
+      "available": true
+    },
+    "ollama": {
+      "version": "0.40.13"
+    }
+  },
+  "models": [
+    {
+      "id": "qwen3.5:4b",
+      "installed": true,
+      "digest": "d8b0f5e9760cd1682034f292d7ef72ec46f432149be0df7574bf2d6e92e38c04",
+      "size_bytes": 3324173934,
+      "modified_at": "2026-11-01T01:50:41.2541411+08:00",
+      "details": {
+        "format": "gguf",
+        "family": "qwen35",
+        "families": [
+          "qwen35"
+        ],
+        "parameter_size": "4.2B",
+        "quantization_level": "Q4_K_M",
+        "runner": "llamacpp",
+        "parent_model": "model.gguf"
+      },
+      "model_info": {
+        "architecture": "qwen35",
+        "context_length": 262144,
+        "parameter_count": 4205751296,
+        "embedding_length": 2560,
+        "block_count": 32,
+        "quantization_version": 2,
+        "license": "apache-2.0",
+        "base_model_name": "Qwen3.5 4B Base",
+        "base_model_repo": "https://huggingface.co/Qwen/Qwen3.5-4B-Base"
+      },
+      "default_parameters": {
+        "presence_penalty": 1.5,
+        "temperature": 1,
+        "top_k": 20,
+        "top_p": 0.95
+      },
+      "capabilities": [
+        "completion",
+        "vision",
+        "tools",
+        "thinking"
+      ],
+      "admission": {
+        "allowed": true,
+        "reason": ""
+      },
+      "size_gib": 3.096,
+      "template_sha256": "b507b9c2f6ca642bffcd06665ea7c91f235fd32daeefdf875a0f938db05fb315",
+      "modelfile_sha256": "2a15cae89a8cb34d7c7625e1476e82222884cf2e7e24d24ae1f4dd8365194c9e",
+      "license_sha256": "50cbab8a892c5f2993b8c7351a99182507472def3b1374558308605d99b86b32",
+      "previously_loaded": [],
+      "preload_cleanup": [],
+      "cleanup": {
+        "already_unloaded": true
+      },
+      "loaded_after": [],
+      "status": "failed",
+      "suite": "performance"
+    },
+    {
+      "id": "qwen3.5:9b",
+      "installed": true,
+      "digest": "56671c2ab9385f9cfcb404638e32cd62d88e3501d44822208363c010179a3c90",
+      "size_bytes": 6550825550,
+      "modified_at": "2026-11-01T14:10:15.9325189+08:00",
+      "details": {
+        "format": "gguf",
+        "family": "qwen35",
+        "families": [
+          "qwen35"
+        ],
+        "parameter_size": "9.0B",
+        "quantization_level": "Q4_K_M",
+        "runner": "llamacpp",
+        "parent_model": "model.gguf"
+      },
+      "model_info": {
+        "architecture": "qwen35",
+        "context_length": 262144,
+        "parameter_count": 8953803264,
+        "embedding_length": 4096,
+        "block_count": 32,
+        "quantization_version": 2,
+        "license": "apache-2.0",
+        "base_model_name": "Qwen3.5 9B Base",
+        "base_model_repo": "https://huggingface.co/Qwen/Qwen3.5-9B-Base"
+      },
+      "default_parameters": {
+        "presence_penalty": 1.5,
+        "temperature": 1,
+        "top_k": 20,
+        "top_p": 0.95
+      },
+      "capabilities": [
+        "completion",
+        "vision",
+        "tools",
+        "thinking"
+      ],
+      "admission": {
+        "allowed": true,
+        "reason": ""
+      },
+      "size_gib": 6.101,
+      "template_sha256": "b507b9c2f6ca642bffcd06665ea7c91f235fd32daeefdf875a0f938db05fb315",
+      "modelfile_sha256": "cbc201ae1acdac1d033a2fa7f36a69cfbd1babc05222cec1a19d7ac90c6e5b30",
+      "license_sha256": "50cbab8a892c5f2993b8c7351a99182507472def3b1374558308605d99b86b32",
+      "previously_loaded": [],
+      "preload_cleanup": [],
+      "cleanup": {
+        "model": "qwen3.5:9b",
+        "already_unloaded": false,
+        "unload_request_ms": 29.35,
+        "unload_wait_ms": 164.06
+      },
+      "loaded_after": [],
+      "preflight_notes": [],
+      "status": "completed",
+      "suite": "performance"
+    }
+  ],
+  "cases": {
+    "sha256": "baf2065dcc1421997fd734c42596b90b84c6320359bca114e9a440c66e19963c",
+    "items": [
+      {
+        "id": "short_factual_zh",
+        "category": "factual_explanation",
+        "language": "zh-CN",
+        "system": "你是 Nova，一个简洁、可靠的中文助手。回答使用简体中文，先给结论，再给必要解释。",
+        "prompt": "请用三句话解释什么是潮汐锁定，并举一个太阳系内的例子。",
+        "max_tokens": 128,
+        "notes": "Short answer; exercises prompt decode and a brief generation."
+      },
+      {
+        "id": "medium_reasoning_zh",
+        "category": "reasoning_math",
+        "language": "zh-CN",
+        "system": "你是 Nova，一个简洁、可靠的中文助手。回答使用简体中文，先给结论，再给必要解释。",
+        "prompt": "一个水槽有进水管和出水管。进水管单独注满水槽需要 6 小时，出水管单独排空需要 9 小时。若水槽开始时是空的，两管同时打开，多久能注满？请写出计算步骤，并用分数表示结果。",
+        "max_tokens": 160,
+        "notes": "Deterministic arithmetic with a fractional answer; tests multi-step generation."
+      },
+      {
+        "id": "long_context_zh",
+        "category": "long_context_summary",
+        "language": "zh-CN",
+        "system": "你是 Nova，一个简洁、可靠的中文助手。回答使用简体中文，先给结论，再给必要解释。",
+        "prompt": "下面是一段虚构的档案馆介绍。请阅读后完成两个任务：第一，用五个要点总结这段文字；第二，指出文中唯一一个具体日期。\n\n星图档案馆位于一座海港城市的旧钟楼里。馆内分为三层：一层存放航海日志，二层存放星图与仪器，三层只在每月第一个星期一开放。档案馆的夜航记录员每天傍晚整理当天收到的观测卡片，并按海域、日期和观测者分类。所有卡片先放入一层西侧的临时柜，经过核对后再移入二层。三层保存的是一份长期观测索引，只有提前预约的研究者才能进入。\n\n这座档案馆最初由一群退休领航员建立。他们希望把零散的夜间观测记录保存下来，方便后来者比较不同海域的星象变化。最早的卡片使用铅笔书写，后来改为耐水的蓝黑墨水。每一张卡片都要求写明观测时间、海域编号、天气和观测者代号；如果缺少任何一项，记录员会在当天退回补写。\n\n馆内最特别的是一面“回声墙”。墙上挂着许多小铜牌，每块铜牌对应一次重要的远航。铜牌不写姓名，只写航线和返航日期。参观者可以把耳朵贴近铜牌，听到一段预先录制的海浪声。工作人员说，这不是纪念某个人，而是提醒人们：每一次远航都依赖许多无名者的合作。\n\n档案馆在 2147 年 3 月 12 日完成了一次大规模整理，把原本分散在四个房间的卡片按海域重新编号。整理期间，旧编号和新编号同时保留在卡片右上角，直到一年后才停止使用旧编号。整理后的目录增加了一项“异常记录”标签，用来标记天气、时间或位置互相矛盾的卡片。\n\n如今，档案馆仍然保留手工登记的做法。每晚闭馆前，值班记录员会把当天的卡片数量、退回数量和异常数量写在一块小黑板上。第二天开馆时，第一位到馆的研究者可以看到这块黑板。馆方认为，这种公开的日常记录比年度报告更能反映档案工作的真实节奏。\n\n请用五个要点总结这段文字，并在最后单独一行写出文中唯一一个具体日期。",
+        "max_tokens": 192,
+        "notes": "About 900 Chinese characters; exercises prompt processing and summarization."
+      }
+    ]
+  },
+  "runs": [
+    {
+      "run_index": 1,
+      "model": "qwen3.5:4b",
+      "case_id": "short_factual_zh",
+      "phase": "cold",
+      "repetition": 0,
+      "success": false,
+      "started_at": "2026-11-01T22:56:57+08:00",
+      "timings": {
+        "ttft_ms": null,
+        "wall_time_ms": 23579.928,
+        "load_duration_ms": null,
+        "prompt_eval_duration_ms": null,
+        "eval_duration_ms": null,
+        "total_duration_ms": null,
+        "prompt_eval_count": null,
+        "eval_count": null,
+        "tokens_per_second": null,
+        "prompt_tokens_per_second": null,
+        "end_to_end_tokens_per_second": null,
+        "provider_timings": false
+      },
+      "memory": {
+        "samples_count": 40,
+        "duration_s": 23.785,
+        "gpu_available": true,
+        "gpu_total_baseline_mib": 1988,
+        "gpu_total_peak_mib": 5058,
+        "gpu_total_delta_peak_mib": 3070,
+        "gpu_util_peak_percent": 14,
+        "gpu_temperature_peak_c": 46.18,
+        "system_total_mib": 15477.3,
+        "system_used_baseline_mib": 11880.1,
+        "system_used_peak_mib": 12764.8,
+        "system_available_min_mib": 2712.5,
+        "ollama_working_set_peak_mib": 48.262,
+        "llama_working_set_peak_mib": 1149.004,
+        "ollama_private_peak_mib": 76.145,
+        "llama_private_peak_mib": 5051.473,
+        "process_source": "ctypes",
+        "compute_apps_start": [],
+        "compute_apps_end": []
+      },
+      "response": {
+        "chars": 0,
+        "sha256": null,
+        "thinking_chars": 0,
+        "chunks": 0,
+        "done_reason": null,
+        "preview": ""
+      },
+      "request": {
+        "case_id": "short_factual_zh",
+        "messages_count": 2,
+        "prompt_chars": 27,
+        "system_chars": 42,
+        "messages_sha256": "c95314427bec35f062988fc3d97770186feb06f381e96e11e33789da94f0d7b2",
+        "options": {
+          "num_ctx": 4096,
+          "num_predict": 128,
+          "temperature": 0.2,
+          "top_p": 0.9,
+          "top_k": 40,
+          "seed": 42,
+          "repeat_penalty": 1.1,
+          "presence_penalty": 0.0
+        },
+        "keep_alive": "5m",
+        "think": false
+      },
+      "error": "OllamaError: Ollama HTTP 500 for /api/chat"
+    },
+    {
+      "run_index": 2,
+      "model": "qwen3.5:9b",
+      "case_id": "short_factual_zh",
+      "phase": "cold",
+      "repetition": 0,
+      "success": true,
+      "started_at": "2026-11-01T22:57:21+08:00",
+      "timings": {
+        "ttft_ms": 50838.764,
+        "wall_time_ms": 52909.451,
+        "load_duration_ms": 29238.794,
+        "prompt_eval_duration_ms": 21535.329,
+        "eval_duration_ms": 2071.249,
+        "total_duration_ms": 52853.362,
+        "prompt_eval_count": 54,
+        "eval_count": 67,
+        "tokens_per_second": 32.348,
+        "prompt_tokens_per_second": 2.508,
+        "end_to_end_tokens_per_second": 1.266,
+        "provider_timings": true
+      },
+      "memory": {
+        "samples_count": 86,
+        "duration_s": 53.031,
+        "gpu_available": true,
+        "gpu_total_baseline_mib": 2129,
+        "gpu_total_peak_mib": 8644,
+        "gpu_total_delta_peak_mib": 6515,
+        "gpu_util_peak_percent": 92,
+        "gpu_temperature_peak_c": 57.69,
+        "system_total_mib": 15477.3,
+        "system_used_baseline_mib": 11962.8,
+        "system_used_peak_mib": 12774.3,
+        "system_available_min_mib": 2703.0,
+        "ollama_working_set_peak_mib": 273.996,
+        "llama_working_set_peak_mib": 1378.035,
+        "ollama_private_peak_mib": 433.614,
+        "llama_private_peak_mib": 8332.473,
+        "process_source": "ctypes",
+        "compute_apps_start": [],
+        "compute_apps_end": [
+          {
+            "pid": 30624,
+            "name": "llama-server.exe",
+            "used_memory_mib": null
+          }
+        ],
+        "model_size_vram_mib": 5346.62,
+        "model_size_mib": 5346.62
+      },
+      "response": {
+        "chars": 116,
+        "sha256": "3fba2f573b7c738a6be7cfd61ebfca344802de6855a6a5606c5a773f7c5d02d9",
+        "thinking_chars": 0,
+        "chunks": 65,
+        "done_reason": "stop",
+        "preview": "潮汐锁定是指两个天体之间因引力相互作用导致自转周期与公转周期完全同步的现象。\n\n这种现象使得被锁定的天体始终以同一面朝向其伴星，从而永远看不到对方的另一侧。\n\n太阳系中典型的例子是月球已被地球潮汐锁定，因此我们只能观测到月球的正面。"
+      },
+      "request": {
+        "case_id": "short_factual_zh",
+        "messages_count": 2,
+        "prompt_chars": 27,
+        "system_chars": 42,
+        "messages_sha256": "c95314427bec35f062988fc3d97770186feb06f381e96e11e33789da94f0d7b2",
+        "options": {
+          "num_ctx": 4096,
+          "num_predict": 128,
+          "temperature": 0.2,
+          "top_p": 0.9,
+          "top_k": 40,
+          "seed": 42,
+          "repeat_penalty": 1.1,
+          "presence_penalty": 0.0
+        },
+        "keep_alive": "5m",
+        "think": false
+      },
+      "error": null
+    },
+    {
+      "run_index": 3,
+      "model": "qwen3.5:9b",
+      "case_id": "short_factual_zh",
+      "phase": "warm",
+      "repetition": 0,
+      "success": true,
+      "started_at": "2026-11-01T22:58:14+08:00",
+      "timings": {
+        "ttft_ms": 128.337,
+        "wall_time_ms": 1233.805,
+        "load_duration_ms": 6.521,
+        "prompt_eval_duration_ms": 39.438,
+        "eval_duration_ms": 1105.551,
+        "total_duration_ms": 1169.966,
+        "prompt_eval_count": 54,
+        "eval_count": 67,
+        "tokens_per_second": 60.603,
+        "prompt_tokens_per_second": 1369.238,
+        "end_to_end_tokens_per_second": 54.304,
+        "provider_timings": true
+      },
+      "memory": {
+        "samples_count": 3,
+        "duration_s": 1.345,
+        "gpu_available": true,
+        "gpu_total_baseline_mib": 8396,
+        "gpu_total_peak_mib": 8396,
+        "gpu_total_delta_peak_mib": 0,
+        "gpu_util_peak_percent": 90,
+        "gpu_temperature_peak_c": 58.19,
+        "system_total_mib": 15477.3,
+        "system_used_baseline_mib": 12787.6,
+        "system_used_peak_mib": 12787.6,
+        "system_available_min_mib": 2689.8,
+        "ollama_working_set_peak_mib": 29.914,
+        "llama_working_set_peak_mib": 1232.742,
+        "ollama_private_peak_mib": 76.582,
+        "llama_private_peak_mib": 8280.395,
+        "process_source": "ctypes",
+        "compute_apps_start": [
+          {
+            "pid": 30624,
+            "name": "llama-server.exe",
+            "used_memory_mib": null
+          }
+        ],
+        "compute_apps_end": [
+          {
+            "pid": 30624,
+            "name": "llama-server.exe",
+            "used_memory_mib": null
+          }
+        ],
+        "model_size_vram_mib": 5346.62,
+        "model_size_mib": 5346.62
+      },
+      "response": {
+        "chars": 116,
+        "sha256": "3fba2f573b7c738a6be7cfd61ebfca344802de6855a6a5606c5a773f7c5d02d9",
+        "thinking_chars": 0,
+        "chunks": 65,
+        "done_reason": "stop",
+        "preview": "潮汐锁定是指两个天体之间因引力相互作用导致自转周期与公转周期完全同步的现象。\n\n这种现象使得被锁定的天体始终以同一面朝向其伴星，从而永远看不到对方的另一侧。\n\n太阳系中典型的例子是月球已被地球潮汐锁定，因此我们只能观测到月球的正面。"
+      },
+      "request": {
+        "case_id": "short_factual_zh",
+        "messages_count": 2,
+        "prompt_chars": 27,
+        "system_chars": 42,
+        "messages_sha256": "c95314427bec35f062988fc3d97770186feb06f381e96e11e33789da94f0d7b2",
+        "options": {
+          "num_ctx": 4096,
+          "num_predict": 128,
+          "temperature": 0.2,
+          "top_p": 0.9,
+          "top_k": 40,
+          "seed": 42,
+          "repeat_penalty": 1.1,
+          "presence_penalty": 0.0
+        },
+        "keep_alive": "5m",
+        "think": false
+      },
+      "error": null
+    },
+    {
+      "run_index": 4,
+      "model": "qwen3.5:9b",
+      "case_id": "short_factual_zh",
+      "phase": "warm",
+      "repetition": 1,
+      "success": true,
+      "started_at": "2026-11-01T22:58:15+08:00",
+      "timings": {
+        "ttft_ms": 108.201,
+        "wall_time_ms": 1163.15,
+        "load_duration_ms": 2.067,
+        "prompt_eval_duration_ms": 41.551,
+        "eval_duration_ms": 1055.027,
+        "total_duration_ms": 1100.604,
+        "prompt_eval_count": 54,
+        "eval_count": 67,
+        "tokens_per_second": 63.505,
+        "prompt_tokens_per_second": 1299.608,
+        "end_to_end_tokens_per_second": 57.602,
+        "provider_timings": true
+      },
+      "memory": {
+        "samples_count": 3,
+        "duration_s": 1.277,
+        "gpu_available": true,
+        "gpu_total_baseline_mib": 8396,
+        "gpu_total_peak_mib": 8473,
+        "gpu_total_delta_peak_mib": 77,
+        "gpu_util_peak_percent": 93,
+        "gpu_temperature_peak_c": 58.74,
+        "system_total_mib": 15477.3,
+        "system_used_baseline_mib": 12773.9,
+        "system_used_peak_mib": 12792.1,
+        "system_available_min_mib": 2685.3,
+        "ollama_working_set_peak_mib": 29.914,
+        "llama_working_set_peak_mib": 1232.766,
+        "ollama_private_peak_mib": 76.582,
+        "llama_private_peak_mib": 8280.414,
+        "process_source": "ctypes",
+        "compute_apps_start": [
+          {
+            "pid": 30624,
+            "name": "llama-server.exe",
+            "used_memory_mib": null
+          }
+        ],
+        "compute_apps_end": [
+          {
+            "pid": 30624,
+            "name": "llama-server.exe",
+            "used_memory_mib": null
+          }
+        ],
+        "model_size_vram_mib": 5346.62,
+        "model_size_mib": 5346.62
+      },
+      "response": {
+        "chars": 116,
+        "sha256": "3fba2f573b7c738a6be7cfd61ebfca344802de6855a6a5606c5a773f7c5d02d9",
+        "thinking_chars": 0,
+        "chunks": 65,
+        "done_reason": "stop",
+        "preview": "潮汐锁定是指两个天体之间因引力相互作用导致自转周期与公转周期完全同步的现象。\n\n这种现象使得被锁定的天体始终以同一面朝向其伴星，从而永远看不到对方的另一侧。\n\n太阳系中典型的例子是月球已被地球潮汐锁定，因此我们只能观测到月球的正面。"
+      },
+      "request": {
+        "case_id": "short_factual_zh",
+        "messages_count": 2,
+        "prompt_chars": 27,
+        "system_chars": 42,
+        "messages_sha256": "c95314427bec35f062988fc3d97770186feb06f381e96e11e33789da94f0d7b2",
+        "options": {
+          "num_ctx": 4096,
+          "num_predict": 128,
+          "temperature": 0.2,
+          "top_p": 0.9,
+          "top_k": 40,
+          "seed": 42,
+          "repeat_penalty": 1.1,
+          "presence_penalty": 0.0
+        },
+        "keep_alive": "5m",
+        "think": false
+      },
+      "error": null
+    },
+    {
+      "run_index": 5,
+      "model": "qwen3.5:9b",
+      "case_id": "short_factual_zh",
+      "phase": "warm",
+      "repetition": 2,
+      "success": true,
+      "started_at": "2026-11-01T22:58:17+08:00",
+      "timings": {
+        "ttft_ms": 134.103,
+        "wall_time_ms": 1188.367,
+        "load_duration_ms": 2.031,
+        "prompt_eval_duration_ms": 41.767,
+        "eval_duration_ms": 1054.302,
+        "total_duration_ms": 1126.877,
+        "prompt_eval_count": 54,
+        "eval_count": 67,
+        "tokens_per_second": 63.549,
+        "prompt_tokens_per_second": 1292.887,
+        "end_to_end_tokens_per_second": 56.38,
+        "provider_timings": true
+      },
+      "memory": {
+        "samples_count": 3,
+        "duration_s": 1.31,
+        "gpu_available": true,
+        "gpu_total_baseline_mib": 8473,
+        "gpu_total_peak_mib": 8473,
+        "gpu_total_delta_peak_mib": 0,
+        "gpu_util_peak_percent": 93,
+        "gpu_temperature_peak_c": 58.85,
+        "system_total_mib": 15477.3,
+        "system_used_baseline_mib": 12808.1,
+        "system_used_peak_mib": 12808.1,
+        "system_available_min_mib": 2669.2,
+        "ollama_working_set_peak_mib": 30.211,
+        "llama_working_set_peak_mib": 1232.781,
+        "ollama_private_peak_mib": 76.84,
+        "llama_private_peak_mib": 8280.43,
+        "process_source": "ctypes",
+        "compute_apps_start": [
+          {
+            "pid": 30624,
+            "name": "llama-server.exe",
+            "used_memory_mib": null
+          }
+        ],
+        "compute_apps_end": [
+          {
+            "pid": 30624,
+            "name": "llama-server.exe",
+            "used_memory_mib": null
+          }
+        ],
+        "model_size_vram_mib": 5346.62,
+        "model_size_mib": 5346.62
+      },
+      "response": {
+        "chars": 116,
+        "sha256": "3fba2f573b7c738a6be7cfd61ebfca344802de6855a6a5606c5a773f7c5d02d9",
+        "thinking_chars": 0,
+        "chunks": 65,
+        "done_reason": "stop",
+        "preview": "潮汐锁定是指两个天体之间因引力相互作用导致自转周期与公转周期完全同步的现象。\n\n这种现象使得被锁定的天体始终以同一面朝向其伴星，从而永远看不到对方的另一侧。\n\n太阳系中典型的例子是月球已被地球潮汐锁定，因此我们只能观测到月球的正面。"
+      },
+      "request": {
+        "case_id": "short_factual_zh",
+        "messages_count": 2,
+        "prompt_chars": 27,
+        "system_chars": 42,
+        "messages_sha256": "c95314427bec35f062988fc3d97770186feb06f381e96e11e33789da94f0d7b2",
+        "options": {
+          "num_ctx": 4096,
+          "num_predict": 128,
+          "temperature": 0.2,
+          "top_p": 0.9,
+          "top_k": 40,
+          "seed": 42,
+          "repeat_penalty": 1.1,
+          "presence_penalty": 0.0
+        },
+        "keep_alive": "5m",
+        "think": false
+      },
+      "error": null
+    },
+    {
+      "run_index": 6,
+      "model": "qwen3.5:9b",
+      "case_id": "medium_reasoning_zh",
+      "phase": "warm",
+      "repetition": 0,
+      "success": true,
+      "started_at": "2026-11-01T22:58:18+08:00",
+      "timings": {
+        "ttft_ms": 521.817,
+        "wall_time_ms": 3119.052,
+        "load_duration_ms": 2.042,
+        "prompt_eval_duration_ms": 455.289,
+        "eval_duration_ms": 2597.2,
+        "total_duration_ms": 3056.98,
+        "prompt_eval_count": 98,
+        "eval_count": 160,
+        "tokens_per_second": 61.605,
+        "prompt_tokens_per_second": 215.248,
+        "end_to_end_tokens_per_second": 51.298,
+        "provider_timings": true
+      },
+      "memory": {
+        "samples_count": 6,
+        "duration_s": 3.241,
+        "gpu_available": true,
+        "gpu_total_baseline_mib": 8412,
+        "gpu_total_peak_mib": 8412,
+        "gpu_total_delta_peak_mib": 0,
+        "gpu_util_peak_percent": 93,
+        "gpu_temperature_peak_c": 59.2,
+        "system_total_mib": 15477.3,
+        "system_used_baseline_mib": 12752.6,
+        "system_used_peak_mib": 12823.5,
+        "system_available_min_mib": 2653.8,
+        "ollama_working_set_peak_mib": 30.363,
+        "llama_working_set_peak_mib": 1256.574,
+        "ollama_private_peak_mib": 76.996,
+        "llama_private_peak_mib": 8304.348,
+        "process_source": "ctypes",
+        "compute_apps_start": [
+          {
+            "pid": 30624,
+            "name": "llama-server.exe",
+            "used_memory_mib": null
+          }
+        ],
+        "compute_apps_end": [
+          {
+            "pid": 30624,
+            "name": "llama-server.exe",
+            "used_memory_mib": null
+          }
+        ],
+        "model_size_vram_mib": 5346.62,
+        "model_size_mib": 5346.62
+      },
+      "response": {
+        "chars": 275,
+        "sha256": "1682c1f9a0171ac90aa7b80ca8cd5099cefded6da609010fe4715beec63ea4c6",
+        "thinking_chars": 0,
+        "chunks": 135,
+        "done_reason": "length",
+        "preview": "**结论：** 需要 $\\frac{54}{5}$ 小时（或 $10\\frac{4}{5}$ 小时）。\n\n**计算步骤：**\n\n1.  **确定工作效率：**\n    *   进水管每小时注水量为水槽的 $\\frac{1}{6}$。\n   "
+      },
+      "request": {
+        "case_id": "medium_reasoning_zh",
+        "messages_count": 2,
+        "prompt_chars": 85,
+        "system_chars": 42,
+        "messages_sha256": "6ce8b9e6f0cb1e94cf562e1ac7eb0eef37284f4ef88d90aff9a2d4eb315c0ae0",
+        "options": {
+          "num_ctx": 4096,
+          "num_predict": 160,
+          "temperature": 0.2,
+          "top_p": 0.9,
+          "top_k": 40,
+          "seed": 42,
+          "repeat_penalty": 1.1,
+          "presence_penalty": 0.0
+        },
+        "keep_alive": "5m",
+        "think": false
+      },
+      "error": null
+    },
+    {
+      "run_index": 7,
+      "model": "qwen3.5:9b",
+      "case_id": "medium_reasoning_zh",
+      "phase": "warm",
+      "repetition": 1,
+      "success": true,
+      "started_at": "2026-11-01T22:58:21+08:00",
+      "timings": {
+        "ttft_ms": 132.696,
+        "wall_time_ms": 2709.006,
+        "load_duration_ms": 2.171,
+        "prompt_eval_duration_ms": 41.079,
+        "eval_duration_ms": 2576.498,
+        "total_duration_ms": 2646.575,
+        "prompt_eval_count": 98,
+        "eval_count": 160,
+        "tokens_per_second": 62.1,
+        "prompt_tokens_per_second": 2385.647,
+        "end_to_end_tokens_per_second": 59.062,
+        "provider_timings": true
+      },
+      "memory": {
+        "samples_count": 6,
+        "duration_s": 2.835,
+        "gpu_available": true,
+        "gpu_total_baseline_mib": 8394,
+        "gpu_total_peak_mib": 8592,
+        "gpu_total_delta_peak_mib": 198,
+        "gpu_util_peak_percent": 93,
+        "gpu_temperature_peak_c": 59.29,
+        "system_total_mib": 15477.3,
+        "system_used_baseline_mib": 12930.2,
+        "system_used_peak_mib": 12977.4,
+        "system_available_min_mib": 2499.9,
+        "ollama_working_set_peak_mib": 30.426,
+        "llama_working_set_peak_mib": 1365.137,
+        "ollama_private_peak_mib": 77.059,
+        "llama_private_peak_mib": 8413.121,
+        "process_source": "ctypes",
+        "compute_apps_start": [
+          {
+            "pid": 30624,
+            "name": "llama-server.exe",
+            "used_memory_mib": null
+          }
+        ],
+        "compute_apps_end": [
+          {
+            "pid": 30624,
+            "name": "llama-server.exe",
+            "used_memory_mib": null
+          }
+        ],
+        "model_size_vram_mib": 5346.62,
+        "model_size_mib": 5346.62
+      },
+      "response": {
+        "chars": 275,
+        "sha256": "1682c1f9a0171ac90aa7b80ca8cd5099cefded6da609010fe4715beec63ea4c6",
+        "thinking_chars": 0,
+        "chunks": 135,
+        "done_reason": "length",
+        "preview": "**结论：** 需要 $\\frac{54}{5}$ 小时（或 $10\\frac{4}{5}$ 小时）。\n\n**计算步骤：**\n\n1.  **确定工作效率：**\n    *   进水管每小时注水量为水槽的 $\\frac{1}{6}$。\n   "
+      },
+      "request": {
+        "case_id": "medium_reasoning_zh",
+        "messages_count": 2,
+        "prompt_chars": 85,
+        "system_chars": 42,
+        "messages_sha256": "6ce8b9e6f0cb1e94cf562e1ac7eb0eef37284f4ef88d90aff9a2d4eb315c0ae0",
+        "options": {
+          "num_ctx": 4096,
+          "num_predict": 160,
+          "temperature": 0.2,
+          "top_p": 0.9,
+          "top_k": 40,
+          "seed": 42,
+          "repeat_penalty": 1.1,
+          "presence_penalty": 0.0
+        },
+        "keep_alive": "5m",
+        "think": false
+      },
+      "error": null
+    },
+    {
+      "run_index": 8,
+      "model": "qwen3.5:9b",
+      "case_id": "medium_reasoning_zh",
+      "phase": "warm",
+      "repetition": 2,
+      "success": true,
+      "started_at": "2026-11-01T22:58:24+08:00",
+      "timings": {
+        "ttft_ms": 108.7,
+        "wall_time_ms": 2604.956,
+        "load_duration_ms": 2.336,
+        "prompt_eval_duration_ms": 42.333,
+        "eval_duration_ms": 2496.187,
+        "total_duration_ms": 2543.024,
+        "prompt_eval_count": 98,
+        "eval_count": 160,
+        "tokens_per_second": 64.098,
+        "prompt_tokens_per_second": 2314.979,
+        "end_to_end_tokens_per_second": 61.421,
+        "provider_timings": true
+      },
+      "memory": {
+        "samples_count": 6,
+        "duration_s": 2.766,
+        "gpu_available": true,
+        "gpu_total_baseline_mib": 8572,
+        "gpu_total_peak_mib": 8572,
+        "gpu_total_delta_peak_mib": 0,
+        "gpu_util_peak_percent": 94,
+        "gpu_temperature_peak_c": 59.31,
+        "system_total_mib": 15477.3,
+        "system_used_baseline_mib": 12933.8,
+        "system_used_peak_mib": 12949.3,
+        "system_available_min_mib": 2528.0,
+        "ollama_working_set_peak_mib": 30.43,
+        "llama_working_set_peak_mib": 1365.102,
+        "ollama_private_peak_mib": 77.059,
+        "llama_private_peak_mib": 8413.031,
+        "process_source": "ctypes",
+        "compute_apps_start": [
+          {
+            "pid": 30624,
+            "name": "llama-server.exe",
+            "used_memory_mib": null
+          }
+        ],
+        "compute_apps_end": [
+          {
+            "pid": 30624,
+            "name": "llama-server.exe",
+            "used_memory_mib": null
+          }
+        ],
+        "model_size_vram_mib": 5346.62,
+        "model_size_mib": 5346.62
+      },
+      "response": {
+        "chars": 275,
+        "sha256": "1682c1f9a0171ac90aa7b80ca8cd5099cefded6da609010fe4715beec63ea4c6",
+        "thinking_chars": 0,
+        "chunks": 135,
+        "done_reason": "length",
+        "preview": "**结论：** 需要 $\\frac{54}{5}$ 小时（或 $10\\frac{4}{5}$ 小时）。\n\n**计算步骤：**\n\n1.  **确定工作效率：**\n    *   进水管每小时注水量为水槽的 $\\frac{1}{6}$。\n   "
+      },
+      "request": {
+        "case_id": "medium_reasoning_zh",
+        "messages_count": 2,
+        "prompt_chars": 85,
+        "system_chars": 42,
+        "messages_sha256": "6ce8b9e6f0cb1e94cf562e1ac7eb0eef37284f4ef88d90aff9a2d4eb315c0ae0",
+        "options": {
+          "num_ctx": 4096,
+          "num_predict": 160,
+          "temperature": 0.2,
+          "top_p": 0.9,
+          "top_k": 40,
+          "seed": 42,
+          "repeat_penalty": 1.1,
+          "presence_penalty": 0.0
+        },
+        "keep_alive": "5m",
+        "think": false
+      },
+      "error": null
+    },
+    {
+      "run_index": 9,
+      "model": "qwen3.5:9b",
+      "case_id": "long_context_zh",
+      "phase": "warm",
+      "repetition": 0,
+      "success": true,
+      "started_at": "2026-11-01T22:58:27+08:00",
+      "timings": {
+        "ttft_ms": 271.067,
+        "wall_time_ms": 2511.874,
+        "load_duration_ms": 2.047,
+        "prompt_eval_duration_ms": 201.221,
+        "eval_duration_ms": 2240.846,
+        "total_duration_ms": 2448.474,
+        "prompt_eval_count": 481,
+        "eval_count": 143,
+        "tokens_per_second": 63.815,
+        "prompt_tokens_per_second": 2390.407,
+        "end_to_end_tokens_per_second": 56.93,
+        "provider_timings": true
+      },
+      "memory": {
+        "samples_count": 5,
+        "duration_s": 2.622,
+        "gpu_available": true,
+        "gpu_total_baseline_mib": 8386,
+        "gpu_total_peak_mib": 8386,
+        "gpu_total_delta_peak_mib": 0,
+        "gpu_util_peak_percent": 93,
+        "gpu_temperature_peak_c": 59.15,
+        "system_total_mib": 15477.3,
+        "system_used_baseline_mib": 12899.8,
+        "system_used_peak_mib": 12901.9,
+        "system_available_min_mib": 2575.4,
+        "ollama_working_set_peak_mib": 30.445,
+        "llama_working_set_peak_mib": 1365.27,
+        "ollama_private_peak_mib": 77.059,
+        "llama_private_peak_mib": 8418.797,
+        "process_source": "ctypes",
+        "compute_apps_start": [
+          {
+            "pid": 30624,
+            "name": "llama-server.exe",
+            "used_memory_mib": null
+          }
+        ],
+        "compute_apps_end": [
+          {
+            "pid": 30624,
+            "name": "llama-server.exe",
+            "used_memory_mib": null
+          }
+        ],
+        "model_size_vram_mib": 5346.62,
+        "model_size_mib": 5346.62
+      },
+      "response": {
+        "chars": 213,
+        "sha256": "b943004e010a8f18524287fb56080777950bf3bdc485d12ad83babe8c22868d3",
+        "thinking_chars": 0,
+        "chunks": 128,
+        "done_reason": "stop",
+        "preview": "1. 星图档案馆位于海港城市旧钟楼内，分三层存放航海日志、星图仪器及长期观测索引。\n2. 馆方由退休领航员建立，旨在保存夜间观测记录以便比较不同海域的星象变化。\n3. 卡片制作有严格规范，需包含时间、海域、天气和代号等要素，缺一不可。\n4."
+      },
+      "request": {
+        "case_id": "long_context_zh",
+        "messages_count": 2,
+        "prompt_chars": 751,
+        "system_chars": 42,
+        "messages_sha256": "086601691d53e974ac5782c71d3dce38c6eebdb4a5fa589f65b6cb6ffa121396",
+        "options": {
+          "num_ctx": 4096,
+          "num_predict": 192,
+          "temperature": 0.2,
+          "top_p": 0.9,
+          "top_k": 40,
+          "seed": 42,
+          "repeat_penalty": 1.1,
+          "presence_penalty": 0.0
+        },
+        "keep_alive": "5m",
+        "think": false
+      },
+      "error": null
+    },
+    {
+      "run_index": 10,
+      "model": "qwen3.5:9b",
+      "case_id": "long_context_zh",
+      "phase": "warm",
+      "repetition": 1,
+      "success": true,
+      "started_at": "2026-11-01T22:58:30+08:00",
+      "timings": {
+        "ttft_ms": 156.188,
+        "wall_time_ms": 2413.377,
+        "load_duration_ms": 28.526,
+        "prompt_eval_duration_ms": 39.586,
+        "eval_duration_ms": 2257.251,
+        "total_duration_ms": 2329.504,
+        "prompt_eval_count": 481,
+        "eval_count": 143,
+        "tokens_per_second": 63.351,
+        "prompt_tokens_per_second": 12150.76,
+        "end_to_end_tokens_per_second": 59.253,
+        "provider_timings": true
+      },
+      "memory": {
+        "samples_count": 5,
+        "duration_s": 2.524,
+        "gpu_available": true,
+        "gpu_total_baseline_mib": 8349,
+        "gpu_total_peak_mib": 8441,
+        "gpu_total_delta_peak_mib": 92,
+        "gpu_util_peak_percent": 93,
+        "gpu_temperature_peak_c": 59.18,
+        "system_total_mib": 15477.3,
+        "system_used_baseline_mib": 12687.0,
+        "system_used_peak_mib": 12700.0,
+        "system_available_min_mib": 2777.3,
+        "ollama_working_set_peak_mib": 30.508,
+        "llama_working_set_peak_mib": 1365.277,
+        "ollama_private_peak_mib": 77.09,
+        "llama_private_peak_mib": 8418.797,
+        "process_source": "ctypes",
+        "compute_apps_start": [
+          {
+            "pid": 30624,
+            "name": "llama-server.exe",
+            "used_memory_mib": null
+          }
+        ],
+        "compute_apps_end": [
+          {
+            "pid": 30624,
+            "name": "llama-server.exe",
+            "used_memory_mib": null
+          }
+        ],
+        "model_size_vram_mib": 5346.62,
+        "model_size_mib": 5346.62
+      },
+      "response": {
+        "chars": 213,
+        "sha256": "b943004e010a8f18524287fb56080777950bf3bdc485d12ad83babe8c22868d3",
+        "thinking_chars": 0,
+        "chunks": 128,
+        "done_reason": "stop",
+        "preview": "1. 星图档案馆位于海港城市旧钟楼内，分三层存放航海日志、星图仪器及长期观测索引。\n2. 馆方由退休领航员建立，旨在保存夜间观测记录以便比较不同海域的星象变化。\n3. 卡片制作有严格规范，需包含时间、海域、天气和代号等要素，缺一不可。\n4."
+      },
+      "request": {
+        "case_id": "long_context_zh",
+        "messages_count": 2,
+        "prompt_chars": 751,
+        "system_chars": 42,
+        "messages_sha256": "086601691d53e974ac5782c71d3dce38c6eebdb4a5fa589f65b6cb6ffa121396",
+        "options": {
+          "num_ctx": 4096,
+          "num_predict": 192,
+          "temperature": 0.2,
+          "top_p": 0.9,
+          "top_k": 40,
+          "seed": 42,
+          "repeat_penalty": 1.1,
+          "presence_penalty": 0.0
+        },
+        "keep_alive": "5m",
+        "think": false
+      },
+      "error": null
+    },
+    {
+      "run_index": 11,
+      "model": "qwen3.5:9b",
+      "case_id": "long_context_zh",
+      "phase": "warm",
+      "repetition": 2,
+      "success": true,
+      "started_at": "2026-11-01T22:58:32+08:00",
+      "timings": {
+        "ttft_ms": 109.597,
+        "wall_time_ms": 2386.681,
+        "load_duration_ms": 2.053,
+        "prompt_eval_duration_ms": 39.407,
+        "eval_duration_ms": 2277.17,
+        "total_duration_ms": 2322.822,
+        "prompt_eval_count": 481,
+        "eval_count": 143,
+        "tokens_per_second": 62.797,
+        "prompt_tokens_per_second": 12205.953,
+        "end_to_end_tokens_per_second": 59.916,
+        "provider_timings": true
+      },
+      "memory": {
+        "samples_count": 5,
+        "duration_s": 2.502,
+        "gpu_available": true,
+        "gpu_total_baseline_mib": 8440,
+        "gpu_total_peak_mib": 8440,
+        "gpu_total_delta_peak_mib": 0,
+        "gpu_util_peak_percent": 92,
+        "gpu_temperature_peak_c": 59.39,
+        "system_total_mib": 15477.3,
+        "system_used_baseline_mib": 12703.9,
+        "system_used_peak_mib": 12832.3,
+        "system_available_min_mib": 2645.1,
+        "ollama_working_set_peak_mib": 30.531,
+        "llama_working_set_peak_mib": 1365.285,
+        "ollama_private_peak_mib": 77.09,
+        "llama_private_peak_mib": 8418.805,
+        "process_source": "ctypes",
+        "compute_apps_start": [
+          {
+            "pid": 30624,
+            "name": "llama-server.exe",
+            "used_memory_mib": null
+          }
+        ],
+        "compute_apps_end": [
+          {
+            "pid": 30624,
+            "name": "llama-server.exe",
+            "used_memory_mib": null
+          }
+        ],
+        "model_size_vram_mib": 5346.62,
+        "model_size_mib": 5346.62
+      },
+      "response": {
+        "chars": 213,
+        "sha256": "b943004e010a8f18524287fb56080777950bf3bdc485d12ad83babe8c22868d3",
+        "thinking_chars": 0,
+        "chunks": 128,
+        "done_reason": "stop",
+        "preview": "1. 星图档案馆位于海港城市旧钟楼内，分三层存放航海日志、星图仪器及长期观测索引。\n2. 馆方由退休领航员建立，旨在保存夜间观测记录以便比较不同海域的星象变化。\n3. 卡片制作有严格规范，需包含时间、海域、天气和代号等要素，缺一不可。\n4."
+      },
+      "request": {
+        "case_id": "long_context_zh",
+        "messages_count": 2,
+        "prompt_chars": 751,
+        "system_chars": 42,
+        "messages_sha256": "086601691d53e974ac5782c71d3dce38c6eebdb4a5fa589f65b6cb6ffa121396",
+        "options": {
+          "num_ctx": 4096,
+          "num_predict": 192,
+          "temperature": 0.2,
+          "top_p": 0.9,
+          "top_k": 40,
+          "seed": 42,
+          "repeat_penalty": 1.1,
+          "presence_penalty": 0.0
+        },
+        "keep_alive": "5m",
+        "think": false
+      },
+      "error": null
+    }
+  ],
+  "suite_results": [
+    {
+      "suite": "performance",
+      "status": "partial",
+      "runs": 1,
+      "successes": 0,
+      "failures": 1
+    },
+    {
+      "suite": "performance",
+      "status": "completed",
+      "runs": 10,
+      "successes": 10,
+      "failures": 0
+    }
+  ],
+  "summary": {
+    "qwen3.5:4b": {
+      "id": "qwen3.5:4b",
+      "admission": {
+        "allowed": true,
+        "reason": ""
+      },
+      "cold": {
+        "runs": 1,
+        "success": 0,
+        "ttft_ms": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "wall_time_ms": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "load_duration_ms": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "prompt_eval_duration_ms": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "eval_duration_ms": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "total_duration_ms": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "tokens_per_second": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "end_to_end_tokens_per_second": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "prompt_eval_count": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "eval_count": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "response_chars": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        }
+      },
+      "warm": {
+        "runs": 0,
+        "success": 0,
+        "ttft_ms": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "wall_time_ms": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "load_duration_ms": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "prompt_eval_duration_ms": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "eval_duration_ms": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "total_duration_ms": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "tokens_per_second": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "end_to_end_tokens_per_second": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "prompt_eval_count": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "eval_count": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        },
+        "response_chars": {
+          "count": 0,
+          "mean": null,
+          "median": null,
+          "p50": null,
+          "p95": null,
+          "min": null,
+          "max": null,
+          "stdev": null
+        }
+      },
+      "warm_by_case": {},
+      "memory": {
+        "samples": 0,
+        "gpu_total_baseline_mib": null,
+        "gpu_total_peak_mib": null,
+        "gpu_total_delta_peak_mib": null,
+        "gpu_util_peak_percent": null,
+        "system_used_baseline_mib": null,
+        "system_used_peak_mib": null,
+        "system_available_min_mib": null,
+        "ollama_working_set_peak_mib": null,
+        "llama_working_set_peak_mib": null,
+        "ollama_private_peak_mib": null,
+        "llama_private_peak_mib": null,
+        "model_size_vram_mib": null,
+        "model_size_mib": null,
+        "process_source": null
+      },
+      "failures": 1
+    },
+    "qwen3.5:9b": {
+      "id": "qwen3.5:9b",
+      "admission": {
+        "allowed": true,
+        "reason": ""
+      },
+      "cold": {
+        "runs": 1,
+        "success": 1,
+        "ttft_ms": {
+          "count": 1,
+          "mean": 50838.764,
+          "median": 50838.764,
+          "p50": 50838.764,
+          "p95": 50838.764,
+          "min": 50838.764,
+          "max": 50838.764,
+          "stdev": null
+        },
+        "wall_time_ms": {
+          "count": 1,
+          "mean": 52909.451,
+          "median": 52909.451,
+          "p50": 52909.451,
+          "p95": 52909.451,
+          "min": 52909.451,
+          "max": 52909.451,
+          "stdev": null
+        },
+        "load_duration_ms": {
+          "count": 1,
+          "mean": 29238.794,
+          "median": 29238.794,
+          "p50": 29238.794,
+          "p95": 29238.794,
+          "min": 29238.794,
+          "max": 29238.794,
+          "stdev": null
+        },
+        "prompt_eval_duration_ms": {
+          "count": 1,
+          "mean": 21535.329,
+          "median": 21535.329,
+          "p50": 21535.329,
+          "p95": 21535.329,
+          "min": 21535.329,
+          "max": 21535.329,
+          "stdev": null
+        },
+        "eval_duration_ms": {
+          "count": 1,
+          "mean": 2071.249,
+          "median": 2071.249,
+          "p50": 2071.249,
+          "p95": 2071.249,
+          "min": 2071.249,
+          "max": 2071.249,
+          "stdev": null
+        },
+        "total_duration_ms": {
+          "count": 1,
+          "mean": 52853.362,
+          "median": 52853.362,
+          "p50": 52853.362,
+          "p95": 52853.362,
+          "min": 52853.362,
+          "max": 52853.362,
+          "stdev": null
+        },
+        "tokens_per_second": {
+          "count": 1,
+          "mean": 32.348,
+          "median": 32.348,
+          "p50": 32.348,
+          "p95": 32.348,
+          "min": 32.348,
+          "max": 32.348,
+          "stdev": null
+        },
+        "end_to_end_tokens_per_second": {
+          "count": 1,
+          "mean": 1.266,
+          "median": 1.266,
+          "p50": 1.266,
+          "p95": 1.266,
+          "min": 1.266,
+          "max": 1.266,
+          "stdev": null
+        },
+        "prompt_eval_count": {
+          "count": 1,
+          "mean": 54.0,
+          "median": 54.0,
+          "p50": 54.0,
+          "p95": 54.0,
+          "min": 54.0,
+          "max": 54.0,
+          "stdev": null
+        },
+        "eval_count": {
+          "count": 1,
+          "mean": 67.0,
+          "median": 67.0,
+          "p50": 67.0,
+          "p95": 67.0,
+          "min": 67.0,
+          "max": 67.0,
+          "stdev": null
+        },
+        "response_chars": {
+          "count": 1,
+          "mean": 116.0,
+          "median": 116.0,
+          "p50": 116.0,
+          "p95": 116.0,
+          "min": 116.0,
+          "max": 116.0,
+          "stdev": null
+        }
+      },
+      "warm": {
+        "runs": 9,
+        "success": 9,
+        "ttft_ms": {
+          "count": 9,
+          "mean": 185.634,
+          "median": 132.696,
+          "p50": 132.696,
+          "p95": 421.517,
+          "min": 108.201,
+          "max": 521.817,
+          "stdev": 135.841
+        },
+        "wall_time_ms": {
+          "count": 9,
+          "mean": 2147.808,
+          "median": 2413.377,
+          "p50": 2413.377,
+          "p95": 2955.034,
+          "min": 1163.15,
+          "max": 3119.052,
+          "stdev": 746.061
+        },
+        "load_duration_ms": {
+          "count": 9,
+          "mean": 5.533,
+          "median": 2.067,
+          "p50": 2.067,
+          "p95": 19.724,
+          "min": 2.031,
+          "max": 28.526,
+          "stdev": 8.746
+        },
+        "prompt_eval_duration_ms": {
+          "count": 9,
+          "mean": 104.63,
+          "median": 41.551,
+          "p50": 41.551,
+          "p95": 353.662,
+          "min": 39.407,
+          "max": 455.289,
+          "stdev": 141.808
+        },
+        "eval_duration_ms": {
+          "count": 9,
+          "mean": 1962.226,
+          "median": 2257.251,
+          "p50": 2257.251,
+          "p95": 2588.919,
+          "min": 1054.302,
+          "max": 2597.2,
+          "stdev": 681.058
+        },
+        "total_duration_ms": {
+          "count": 9,
+          "mean": 2082.758,
+          "median": 2329.504,
+          "p50": 2329.504,
+          "p95": 2892.818,
+          "min": 1100.604,
+          "max": 3056.98,
+          "stdev": 745.204
+        },
+        "tokens_per_second": {
+          "count": 9,
+          "mean": 62.825,
+          "median": 63.351,
+          "p50": 63.351,
+          "p95": 63.985,
+          "min": 60.603,
+          "max": 64.098,
+          "stdev": 1.163
+        },
+        "end_to_end_tokens_per_second": {
+          "count": 9,
+          "mean": 57.352,
+          "median": 57.602,
+          "p50": 57.602,
+          "p95": 60.819,
+          "min": 51.298,
+          "max": 61.421,
+          "stdev": 3.098
+        },
+        "prompt_eval_count": {
+          "count": 9,
+          "mean": 211.0,
+          "median": 98.0,
+          "p50": 98.0,
+          "p95": 481.0,
+          "min": 54.0,
+          "max": 481.0,
+          "stdev": 203.394
+        },
+        "eval_count": {
+          "count": 9,
+          "mean": 123.333,
+          "median": 143.0,
+          "p50": 143.0,
+          "p95": 160.0,
+          "min": 67.0,
+          "max": 160.0,
+          "stdev": 42.886
+        },
+        "response_chars": {
+          "count": 9,
+          "mean": 201.333,
+          "median": 213.0,
+          "p50": 213.0,
+          "p95": 275.0,
+          "min": 116.0,
+          "max": 275.0,
+          "stdev": 69.403
+        }
+      },
+      "warm_by_case": {
+        "long_context_zh": {
+          "runs": 3,
+          "success": 3,
+          "ttft_ms": {
+            "count": 3,
+            "mean": 178.951,
+            "median": 156.188,
+            "p50": 156.188,
+            "p95": 259.579,
+            "min": 109.597,
+            "max": 271.067,
+            "stdev": 83.107
+          },
+          "wall_time_ms": {
+            "count": 3,
+            "mean": 2437.311,
+            "median": 2413.377,
+            "p50": 2413.377,
+            "p95": 2502.024,
+            "min": 2386.681,
+            "max": 2511.874,
+            "stdev": 65.939
+          },
+          "load_duration_ms": {
+            "count": 3,
+            "mean": 10.875,
+            "median": 2.053,
+            "p50": 2.053,
+            "p95": 25.879,
+            "min": 2.047,
+            "max": 28.526,
+            "stdev": 15.286
+          },
+          "prompt_eval_duration_ms": {
+            "count": 3,
+            "mean": 93.405,
+            "median": 39.586,
+            "p50": 39.586,
+            "p95": 185.057,
+            "min": 39.407,
+            "max": 201.221,
+            "stdev": 93.372
+          },
+          "eval_duration_ms": {
+            "count": 3,
+            "mean": 2258.422,
+            "median": 2257.251,
+            "p50": 2257.251,
+            "p95": 2275.178,
+            "min": 2240.846,
+            "max": 2277.17,
+            "stdev": 18.19
+          },
+          "total_duration_ms": {
+            "count": 3,
+            "mean": 2366.933,
+            "median": 2329.504,
+            "p50": 2329.504,
+            "p95": 2436.577,
+            "min": 2322.822,
+            "max": 2448.474,
+            "stdev": 70.695
+          },
+          "tokens_per_second": {
+            "count": 3,
+            "mean": 63.321,
+            "median": 63.351,
+            "p50": 63.351,
+            "p95": 63.769,
+            "min": 62.797,
+            "max": 63.815,
+            "stdev": 0.51
+          },
+          "end_to_end_tokens_per_second": {
+            "count": 3,
+            "mean": 58.7,
+            "median": 59.253,
+            "p50": 59.253,
+            "p95": 59.85,
+            "min": 56.93,
+            "max": 59.916,
+            "stdev": 1.568
+          },
+          "prompt_eval_count": {
+            "count": 3,
+            "mean": 481.0,
+            "median": 481.0,
+            "p50": 481.0,
+            "p95": 481.0,
+            "min": 481.0,
+            "max": 481.0,
+            "stdev": 0.0
+          },
+          "eval_count": {
+            "count": 3,
+            "mean": 143.0,
+            "median": 143.0,
+            "p50": 143.0,
+            "p95": 143.0,
+            "min": 143.0,
+            "max": 143.0,
+            "stdev": 0.0
+          },
+          "response_chars": {
+            "count": 3,
+            "mean": 213.0,
+            "median": 213.0,
+            "p50": 213.0,
+            "p95": 213.0,
+            "min": 213.0,
+            "max": 213.0,
+            "stdev": 0.0
+          }
+        },
+        "medium_reasoning_zh": {
+          "runs": 3,
+          "success": 3,
+          "ttft_ms": {
+            "count": 3,
+            "mean": 254.404,
+            "median": 132.696,
+            "p50": 132.696,
+            "p95": 482.905,
+            "min": 108.7,
+            "max": 521.817,
+            "stdev": 231.897
+          },
+          "wall_time_ms": {
+            "count": 3,
+            "mean": 2811.005,
+            "median": 2709.006,
+            "p50": 2709.006,
+            "p95": 3078.047,
+            "min": 2604.956,
+            "max": 3119.052,
+            "stdev": 271.802
+          },
+          "load_duration_ms": {
+            "count": 3,
+            "mean": 2.183,
+            "median": 2.171,
+            "p50": 2.171,
+            "p95": 2.32,
+            "min": 2.042,
+            "max": 2.336,
+            "stdev": 0.147
+          },
+          "prompt_eval_duration_ms": {
+            "count": 3,
+            "mean": 179.567,
+            "median": 42.333,
+            "p50": 42.333,
+            "p95": 413.993,
+            "min": 41.079,
+            "max": 455.289,
+            "stdev": 238.783
+          },
+          "eval_duration_ms": {
+            "count": 3,
+            "mean": 2556.628,
+            "median": 2576.498,
+            "p50": 2576.498,
+            "p95": 2595.13,
+            "min": 2496.187,
+            "max": 2597.2,
+            "stdev": 53.357
+          },
+          "total_duration_ms": {
+            "count": 3,
+            "mean": 2748.86,
+            "median": 2646.575,
+            "p50": 2646.575,
+            "p95": 3015.939,
+            "min": 2543.024,
+            "max": 3056.98,
+            "stdev": 271.817
+          },
+          "tokens_per_second": {
+            "count": 3,
+            "mean": 62.601,
+            "median": 62.1,
+            "p50": 62.1,
+            "p95": 63.898,
+            "min": 61.605,
+            "max": 64.098,
+            "stdev": 1.32
+          },
+          "end_to_end_tokens_per_second": {
+            "count": 3,
+            "mean": 57.26,
+            "median": 59.062,
+            "p50": 59.062,
+            "p95": 61.185,
+            "min": 51.298,
+            "max": 61.421,
+            "stdev": 5.297
+          },
+          "prompt_eval_count": {
+            "count": 3,
+            "mean": 98.0,
+            "median": 98.0,
+            "p50": 98.0,
+            "p95": 98.0,
+            "min": 98.0,
+            "max": 98.0,
+            "stdev": 0.0
+          },
+          "eval_count": {
+            "count": 3,
+            "mean": 160.0,
+            "median": 160.0,
+            "p50": 160.0,
+            "p95": 160.0,
+            "min": 160.0,
+            "max": 160.0,
+            "stdev": 0.0
+          },
+          "response_chars": {
+            "count": 3,
+            "mean": 275.0,
+            "median": 275.0,
+            "p50": 275.0,
+            "p95": 275.0,
+            "min": 275.0,
+            "max": 275.0,
+            "stdev": 0.0
+          }
+        },
+        "short_factual_zh": {
+          "runs": 3,
+          "success": 3,
+          "ttft_ms": {
+            "count": 3,
+            "mean": 123.547,
+            "median": 128.337,
+            "p50": 128.337,
+            "p95": 133.526,
+            "min": 108.201,
+            "max": 134.103,
+            "stdev": 13.599
+          },
+          "wall_time_ms": {
+            "count": 3,
+            "mean": 1195.107,
+            "median": 1188.367,
+            "p50": 1188.367,
+            "p95": 1229.261,
+            "min": 1163.15,
+            "max": 1233.805,
+            "stdev": 35.807
+          },
+          "load_duration_ms": {
+            "count": 3,
+            "mean": 3.54,
+            "median": 2.067,
+            "p50": 2.067,
+            "p95": 6.076,
+            "min": 2.031,
+            "max": 6.521,
+            "stdev": 2.582
+          },
+          "prompt_eval_duration_ms": {
+            "count": 3,
+            "mean": 40.919,
+            "median": 41.551,
+            "p50": 41.551,
+            "p95": 41.745,
+            "min": 39.438,
+            "max": 41.767,
+            "stdev": 1.287
+          },
+          "eval_duration_ms": {
+            "count": 3,
+            "mean": 1071.627,
+            "median": 1055.027,
+            "p50": 1055.027,
+            "p95": 1100.499,
+            "min": 1054.302,
+            "max": 1105.551,
+            "stdev": 29.382
+          },
+          "total_duration_ms": {
+            "count": 3,
+            "mean": 1132.482,
+            "median": 1126.877,
+            "p50": 1126.877,
+            "p95": 1165.657,
+            "min": 1100.604,
+            "max": 1169.966,
+            "stdev": 35.019
+          },
+          "tokens_per_second": {
+            "count": 3,
+            "mean": 62.552,
+            "median": 63.505,
+            "p50": 63.505,
+            "p95": 63.545,
+            "min": 60.603,
+            "max": 63.549,
+            "stdev": 1.688
+          },
+          "end_to_end_tokens_per_second": {
+            "count": 3,
+            "mean": 56.095,
+            "median": 56.38,
+            "p50": 56.38,
+            "p95": 57.48,
+            "min": 54.304,
+            "max": 57.602,
+            "stdev": 1.667
+          },
+          "prompt_eval_count": {
+            "count": 3,
+            "mean": 54.0,
+            "median": 54.0,
+            "p50": 54.0,
+            "p95": 54.0,
+            "min": 54.0,
+            "max": 54.0,
+            "stdev": 0.0
+          },
+          "eval_count": {
+            "count": 3,
+            "mean": 67.0,
+            "median": 67.0,
+            "p50": 67.0,
+            "p95": 67.0,
+            "min": 67.0,
+            "max": 67.0,
+            "stdev": 0.0
+          },
+          "response_chars": {
+            "count": 3,
+            "mean": 116.0,
+            "median": 116.0,
+            "p50": 116.0,
+            "p95": 116.0,
+            "min": 116.0,
+            "max": 116.0,
+            "stdev": 0.0
+          }
+        }
+      },
+      "memory": {
+        "samples": 10,
+        "gpu_total_baseline_mib": 2129.0,
+        "gpu_total_peak_mib": 8644.0,
+        "gpu_total_delta_peak_mib": 6515.0,
+        "gpu_util_peak_percent": 94.0,
+        "system_used_baseline_mib": 11962.8,
+        "system_used_peak_mib": 12977.4,
+        "system_available_min_mib": 2499.9,
+        "ollama_working_set_peak_mib": 273.996,
+        "llama_working_set_peak_mib": 1378.035,
+        "ollama_private_peak_mib": 433.614,
+        "llama_private_peak_mib": 8418.805,
+        "model_size_vram_mib": 5346.62,
+        "model_size_mib": 5346.62,
+        "process_source": "ctypes"
+      },
+      "failures": 0
+    }
+  },
+  "limitations": [
+    "冷启动定义为模型不在 Ollama /api/ps 中；没有清空 Windows 文件系统页缓存。",
+    "整卡显存包含桌面、浏览器等基线占用，应结合峰值增量和 Ollama size_vram 阅读。",
+    "Windows/WDDM 下 nvidia-smi 的逐进程显存可能为 N/A；为空时不会用文件大小推算。",
+    "单机、单卡、固定样例的单次工程基线，不足以单独决定生产模型选择。",
+    "本套件不评价回答质量、人格一致性、自然对话或记忆准确性。",
+    "27B 实验模型在 16GB 内存机器上只做元数据检查，不执行加载。",
+    "响应仅保留截断预览和 SHA-256，不保存完整原始输出。"
+  ],
+  "error": null,
+  "preflight": {
+    "ok": true,
+    "checks": [
+      {
+        "name": "ollama_reachable",
+        "ok": true,
+        "detail": "0.40.13"
+      },
+      {
+        "name": "gpu_available",
+        "ok": true,
+        "detail": {
+          "name": "NVIDIA GeForce RTX 5060 Ti",
+          "free_mib": 13962,
+          "total_mib": 16311
+        }
+      },
+      {
+        "name": "free_vram",
+        "ok": true,
+        "detail": {
+          "free_mib": 13962,
+          "required_mib": 2048
+        }
+      },
+      {
+        "name": "available_ram",
+        "ok": true,
+        "detail": {
+          "available_mib": 3634.1,
+          "required_mib": 2048
+        }
+      },
+      {
+        "name": "nova_gaming_state",
+        "ok": true,
+        "detail": null
+      },
+      {
+        "name": "game_processes",
+        "ok": true,
+        "detail": []
+      },
+      {
+        "name": "gpu_lease",
+        "ok": true,
+        "detail": {
+          "granted_by": "user via DSH chat approval at 2026-11-01T22:59+08:00",
+          "expires_at": "2026-11-01T23:40:00+08:00",
+          "models": [
+            "qwen3.5:4b",
+            "qwen3.5:9b"
+          ],
+          "max_seconds": 900,
+          "remaining_s": 2582.5
+        }
+      }
+    ],
+    "warnings": [],
+    "loaded_models": [],
+    "lease": {
+      "granted_by": "user via DSH chat approval at 2026-11-01T22:59+08:00",
+      "expires_at": "2026-11-01T23:40:00+08:00",
+      "models": [
+        "qwen3.5:4b",
+        "qwen3.5:9b"
+      ],
+      "max_seconds": 900,
+      "remaining_s": 2582.5
+    }
+  }
+}

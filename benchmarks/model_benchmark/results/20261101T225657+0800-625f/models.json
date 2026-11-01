@@ -1,0 +1,120 @@
+[
+  {
+    "id": "qwen3.5:4b",
+    "installed": true,
+    "digest": "d8b0f5e9760cd1682034f292d7ef72ec46f432149be0df7574bf2d6e92e38c04",
+    "size_bytes": 3324173934,
+    "modified_at": "2026-11-01T01:50:41.2541411+08:00",
+    "details": {
+      "format": "gguf",
+      "family": "qwen35",
+      "families": [
+        "qwen35"
+      ],
+      "parameter_size": "4.2B",
+      "quantization_level": "Q4_K_M",
+      "runner": "llamacpp",
+      "parent_model": "model.gguf"
+    },
+    "model_info": {
+      "architecture": "qwen35",
+      "context_length": 262144,
+      "parameter_count": 4205751296,
+      "embedding_length": 2560,
+      "block_count": 32,
+      "quantization_version": 2,
+      "license": "apache-2.0",
+      "base_model_name": "Qwen3.5 4B Base",
+      "base_model_repo": "https://huggingface.co/Qwen/Qwen3.5-4B-Base"
+    },
+    "default_parameters": {
+      "presence_penalty": 1.5,
+      "temperature": 1,
+      "top_k": 20,
+      "top_p": 0.95
+    },
+    "capabilities": [
+      "completion",
+      "vision",
+      "tools",
+      "thinking"
+    ],
+    "admission": {
+      "allowed": true,
+      "reason": ""
+    },
+    "size_gib": 3.096,
+    "template_sha256": "b507b9c2f6ca642bffcd06665ea7c91f235fd32daeefdf875a0f938db05fb315",
+    "modelfile_sha256": "2a15cae89a8cb34d7c7625e1476e82222884cf2e7e24d24ae1f4dd8365194c9e",
+    "license_sha256": "50cbab8a892c5f2993b8c7351a99182507472def3b1374558308605d99b86b32",
+    "previously_loaded": [],
+    "preload_cleanup": [],
+    "cleanup": {
+      "already_unloaded": true
+    },
+    "loaded_after": [],
+    "status": "failed",
+    "suite": "performance"
+  },
+  {
+    "id": "qwen3.5:9b",
+    "installed": true,
+    "digest": "56671c2ab9385f9cfcb404638e32cd62d88e3501d44822208363c010179a3c90",
+    "size_bytes": 6550825550,
+    "modified_at": "2026-11-01T14:10:15.9325189+08:00",
+    "details": {
+      "format": "gguf",
+      "family": "qwen35",
+      "families": [
+        "qwen35"
+      ],
+      "parameter_size": "9.0B",
+      "quantization_level": "Q4_K_M",
+      "runner": "llamacpp",
+      "parent_model": "model.gguf"
+    },
+    "model_info": {
+      "architecture": "qwen35",
+      "context_length": 262144,
+      "parameter_count": 8953803264,
+      "embedding_length": 4096,
+      "block_count": 32,
+      "quantization_version": 2,
+      "license": "apache-2.0",
+      "base_model_name": "Qwen3.5 9B Base",
+      "base_model_repo": "https://huggingface.co/Qwen/Qwen3.5-9B-Base"
+    },
+    "default_parameters": {
+      "presence_penalty": 1.5,
+      "temperature": 1,
+      "top_k": 20,
+      "top_p": 0.95
+    },
+    "capabilities": [
+      "completion",
+      "vision",
+      "tools",
+      "thinking"
+    ],
+    "admission": {
+      "allowed": true,
+      "reason": ""
+    },
+    "size_gib": 6.101,
+    "template_sha256": "b507b9c2f6ca642bffcd06665ea7c91f235fd32daeefdf875a0f938db05fb315",
+    "modelfile_sha256": "cbc201ae1acdac1d033a2fa7f36a69cfbd1babc05222cec1a19d7ac90c6e5b30",
+    "license_sha256": "50cbab8a892c5f2993b8c7351a99182507472def3b1374558308605d99b86b32",
+    "previously_loaded": [],
+    "preload_cleanup": [],
+    "cleanup": {
+      "model": "qwen3.5:9b",
+      "already_unloaded": false,
+      "unload_request_ms": 29.35,
+      "unload_wait_ms": 164.06
+    },
+    "loaded_after": [],
+    "preflight_notes": [],
+    "status": "completed",
+    "suite": "performance"
+  }
+]

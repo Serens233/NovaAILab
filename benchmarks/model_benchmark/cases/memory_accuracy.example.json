@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0",
+  "suite": "memory_accuracy",
+  "enabled": false,
+  "status": "reserved",
+  "note": "Synthetic facts only. No user conversation, database, or private memory is used.",
+  "cases": [
+    {
+      "id": "synthetic_preference_recall_01",
+      "facts": [
+        "测试用户偏好把实验记录命名为“夜航-编号”。",
+        "测试用户不接受在周末自动发送提醒。"
+      ],
+      "distractor_turns": [
+        "顺便问一下，海雾通常是怎么形成的？",
+        "如果我想整理观测卡片，有什么简单的分类方法？"
+      ],
+      "probes": [
+        {
+          "question": "我之前说过实验记录应该怎么命名？",
+          "expected_fact_id": "naming_preference",
+          "provenance_required": true
+        },
+        {
+          "question": "周末可以自动给我发提醒吗？",
+          "expected_fact_id": "weekend_boundary",
+          "provenance_required": true
+        }
+      ],
+      "rubric": "准确回忆两个事实；不得把未提供的偏好编造成记忆。"
+    },
+    {
+      "id": "synthetic_project_fact_01",
+      "facts": [
+        "合成项目“灯塔”的验收日期是 2147-04-02。",
+        "“灯塔”项目只使用本地模型，不调用云端。"
+      ],
+      "distractor_turns": [
+        "给我讲一个关于海港的短故事。",
+        "如果模型加载失败，一般先检查什么？"
+      ],
+      "probes": [
+        {
+          "question": "“灯塔”项目的验收日期是哪天？",
+          "expected_fact_id": "lighthouse_date",
+          "provenance_required": true
+        },
+        {
+          "question": "“灯塔”项目允许调用云端模型吗？",
+          "expected_fact_id": "lighthouse_local_only",
+          "provenance_required": true
+        }
+      ],
+      "rubric": "日期与本地-only 约束均需正确；错误或编造计为失败。"
+    }
+  ]
+}
