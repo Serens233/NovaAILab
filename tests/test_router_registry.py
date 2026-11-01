@@ -5,7 +5,7 @@ import asyncio
 import pytest
 from pydantic import ValidationError
 
-from nova.chat.registry import QWEN38_MODEL, ModelRegistry, experimental_policy
+from nova.chat.registry import QWEN38_MODEL, ModelRegistry, _qwen38_alias, experimental_policy
 from nova.config import ConfigurationError, Settings, load_settings
 from nova.errors import ApplicationError
 from nova.gpu import resources
@@ -137,10 +137,26 @@ def test_experiment_gate_rejects_before_any_catalog_query(monkeypatch, actual):
         "qwen3.8:27b_q3_k_xl",
     ],
 )
-def test_only_strict_27b_local_suffix_family_is_an_alias(enough_memory, name):
+def test_qwen38_alias_predicate_rejects_non_family_names(name):
+    # 直接测判定函数：部分名称会被目录格式校验先拒绝，不能证明 alias 判定。
+    assert _qwen38_alias(name) is False
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "qwen3.8:27b--q3",
+        "qwen3.8:28b-q3_k_xl",
+        "qwen3.8:27b_q3_k_xl",
+    ],
+)
+def test_only_strict_27b_local_suffix_family_is_selectable(enough_memory, name):
     async def scenario():
-        registry, _ = router([name, CANONICAL], qwen38_enabled=True)
-        await registry.refresh()
+        registry, backend = router([name, CANONICAL], qwen38_enabled=True)
+        refreshed = await registry.refresh()
+        # 目录层接受这些标签，但仍不能被当成 27B 实验别名。
+        assert name in refreshed["installed"]
+        assert backend.queries == 1
         assert name not in registry.local_policies()
         with pytest.raises(ApplicationError) as caught:
             await registry.resolve(name)

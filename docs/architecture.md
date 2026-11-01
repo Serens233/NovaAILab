@@ -149,3 +149,4 @@ POST /api/v1/chat
 - **失败语义**：目录畸形/超量、非法 NDJSON、缺 `done`、空正文、超限、超时、取消和未闭合标签都返回固定公开错误，不携带上游原文、prompt、回复或密钥；取消只中断当前 socket，仍需管理器复核模型卸载，不能把客户端断开当作显存已释放。
 - **超时与取消**：绝对 deadline 覆盖整个流，慢速分块不能重置；`StreamControl` 以 socket shutdown 唤醒阻塞读取，并在取消后等待 HTTP 线程结束。云端使用固定 HTTPS 目标、180 秒总时限和 2 MiB 上限。
 - **接口边界**：`ModelBackend` 仅声明注册表所需的最小异步方法；本阶段不引入 SDK、微服务或 Agent 框架，也没有绕过 `GpuManager` 的 Provider 入口。
+- **离线 benchmark 例外**：`benchmarks/model_benchmark` 是受租约约束的离线测量工具，直接访问回环 Ollama，不是生产入口，也不替代 `GpuManager`。它默认 dry-run、默认拒绝卸载任何已驻留模型；只有租约显式列出这些模型并同时使用 `--allow-unload-loaded` 时才接管，结束后不恢复。租约、游戏/训练门禁、27B 准入或 Nova 配置任一无法确认时拒绝执行；生产 Provider 入口仍必须经过 `GpuManager`。

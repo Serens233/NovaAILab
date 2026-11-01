@@ -159,6 +159,8 @@ class ModelRegistry:
             if model not in self.installed:
                 raise ApplicationError("MODEL_NOT_INSTALLED", "模型尚未下载，不会自动下载", 503)
             if entry.get("experimental"):
+                # 映射后复核：第一次门禁在 /api/tags 之前，这里确认解析出的实际别名
+                # 仍满足同一内存策略，避免持久化别名绕过或依赖缓存结果。
                 require_system_memory(
                     self.policy["min_total_ram_mib"], self.policy["min_available_ram_mib"]
                 )

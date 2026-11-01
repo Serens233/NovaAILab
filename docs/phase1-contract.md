@@ -73,6 +73,8 @@
 
 工作目录：`E:\NovaAILab\worktrees\nova-dsh-model-router`；解释器：`.venv\Scripts\python.exe`（CPython 3.14.10，`uv sync --locked` 创建）。
 
+记录中的 `python -B -m pytest/ruff` 是本次实际执行方式；与项目标准入口 `uv run pytest` / `uv run ruff` 等价，不改变结果。
+
 | 命令 | 实际结果 |
 | --- | --- |
 | `python -B -m pytest -q tests/test_router_registry.py` | **51 passed**，0 failed |
@@ -121,8 +123,8 @@
    - 原因：新注册表在进入 GPU 管理器前完成安装检查；`test_router_registry.py` 已明确期望 `MODEL_NOT_INSTALLED`。
    - 建议：由 API/服务层决定是否把 `MODEL_NOT_INSTALLED` 映射为对外兼容码，或由集成测试负责人更新契约；不要在两个测试间二选一硬改注册表。
 3. `tests/test_gpu_api.py::test_gaming_blocks_generation_and_wake_but_keeps_database_healthy`
-   - 现象：`training.state` 实际为 `idle`，测试期望 `unmanaged`。
-   - 原因：GPU Manager 状态机字段，本任务禁止修改；由 GPU 回归任务或主会话裁定。
+   - 现象：`training.state` 实际为 `idle`，旧测试与旧文档写 `unmanaged`。
+   - 裁定（2026-11-02，主会话）：对外保留 `idle` 表示“当前没有登记训练租约”；`unmanaged` 是引入训练租约前的旧值，不能描述 `preparing`/`reserved`/`unknown_after_restart` 状态。由 B 分支同步旧集成测试与 `docs/*`；本任务不改 GPU Manager 状态机。
 4. 真实 27B 推理、中文质量、首 token、tokens/s、加载/卸载仍未执行：本机 15.11 GiB < 28 GiB 门禁，按设计拒绝；不得用 9B/4B 数据代替。
 
 ## 7. 安全与依赖
