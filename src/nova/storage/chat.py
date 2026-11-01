@@ -268,6 +268,38 @@ class ChatStore:
             self._require_idle(connection, thread_id)
             connection.execute("DELETE FROM nova_threads WHERE id = ?", (thread_id,))
 
+    def get_completed_run(self, thread_id, model, content, request_id):
+        """只读查找已完成请求；未命中返回None，冲突语义与begin_run一致。"""
+        model = _text(model, "模型标识不合法", maximum=128)
+        content = _text(content, "消息内容不能为空")
+        request_id = _text(request_id, "请求标识不合法", maximum=128)
+        with self._session() as connection:
+            self._thread(connection, thread_id)
+            prior = connection.execute(
+                "SELECT * FROM nova_chat_runs WHERE thread_id = ? AND request_id = ?",
+                (thread_id, request_id),
+            ).fetchone()
+            if prior is None:
+                return None
+            user = self._message(connection, prior["user_message_id"])
+            if user["content"] != content or prior["model"] != model:
+                raise ApplicationError(
+                    "CHAT_REQUEST_CONFLICT", "同一请求标识不能用于不同消息或模型", 409
+                )
+            if prior["status"] != "complete":
+                raise ApplicationError(
+                    "CHAT_REQUEST_CONFLICT", "该请求正在执行或已中断，请使用新的请求标识", 409
+                )
+            assistant = self._message(connection, prior["assistant_message_id"])
+            if assistant["status"] != "complete":
+                raise _invalid_schema()
+            return {
+                "run_id": prior["id"],
+                "user_message": user,
+                "assistant_message": assistant,
+                "is_replay": True,
+            }
+
     def begin_run(self, thread_id, model, content, request_id):
         model = _text(model, "模型标识不合法", maximum=128)
         content = _text(content, "消息内容不能为空")

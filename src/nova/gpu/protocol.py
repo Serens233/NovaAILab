@@ -15,6 +15,11 @@ class ModelBackend(Protocol):
     async def list_installed_models(self) -> list[str]: ...
     async def ensure_local_model(self, model: str) -> None: ...
     async def stream_chat(
-        self, model: str, messages: list[dict], on_delta, *, runtime: dict | None = None,
+        self,
+        model: str,
+        messages: list[dict],
+        on_delta,
+        *,
+        runtime: dict | None = None,
         control=None,
     ) -> dict: ...

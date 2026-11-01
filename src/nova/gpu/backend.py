@@ -30,6 +30,10 @@ class CancelledBackendError(BackendError):
         super().__init__("本地推理已请求取消，仍需管理器复核模型资源。")
 
 
+class ModelNotInstalledError(BackendError):
+    """模型确实不在本机 tags 中；与上游不可用/不确定故障区分。"""
+
+
 class StreamControl:
     """只关闭本请求的连接；取消成功不等于 Ollama 已经释放显存。"""
 
@@ -287,7 +291,7 @@ class OllamaBackend:
             None,
         )
         if item is None:
-            raise BackendError("指定模型尚未在本机安装；管理器不会自动下载。")
+            raise ModelNotInstalledError("指定模型尚未在本机安装；管理器不会自动下载。")
         if item.get("remote_host") or item.get("remote_model"):
             raise BackendError("此入口仅允许已下载的本地模型，不启用云端调用。")
 
