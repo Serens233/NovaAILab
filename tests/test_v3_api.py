@@ -218,7 +218,9 @@ def test_experimental_json_then_multiturn_sse_preserves_persona_history_and_runt
         assert stream[-1]["message"]["status"] == "complete"
         assert all(call["model"] == QWEN38_MODEL for call in backend.stream_calls)
         assert all(
-            call["messages"][0] == {"role": "system", "content": SYSTEM_MESSAGE}
+            call["messages"][0]["role"] == "system"
+            and call["messages"][0]["content"].startswith(SYSTEM_MESSAGE)
+            and "星图档案馆的夜航记录员" in call["messages"][0]["content"]
             for call in backend.stream_calls
         )
         assert backend.stream_calls[1]["messages"][-3:] == [

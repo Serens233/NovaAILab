@@ -79,6 +79,17 @@ class Settings(BaseSettings):
         default=180, ge=1, le=3600, allow_inf_nan=False, alias="NOVA_CHAT_IDLE_SECONDS"
     )
     cloud_enabled: bool = Field(default=False, alias="NOVA_CLOUD_ENABLED")
+    persona_config_dir: Path | None = Field(default=None, alias="NOVA_PERSONA_CONFIG_DIR")
+
+    @field_validator("persona_config_dir", mode="before")
+    @classmethod
+    def optional_persona_directory(cls, value):
+        if value is None or isinstance(value, str) and not value.strip():
+            return None
+        if not isinstance(value, (str, Path)):
+            raise ValueError("人格配置目录必须为空或路径")
+        return Path(value).expanduser().resolve()
+
     # 实验模型不替换稳定默认值，默认只登记而不允许加载。
     qwen38_enabled: bool = Field(default=False, alias="NOVA_QWEN38_ENABLED")
     qwen38_model: str = Field(default=QWEN38_MODEL, max_length=128, alias="NOVA_QWEN38_MODEL")
@@ -253,6 +264,7 @@ _FIELD_HINTS = {
     "NOVA_CHAT_FALLBACK_MODEL": "必须为空、qwen3.5:9b或qwen3.5:4b；只允许显式配置的本地回退",
     "NOVA_CHAT_IDLE_SECONDS": "必须为1至3600秒的有限数值，默认180秒",
     "NOVA_CLOUD_ENABLED": "必须为布尔值；付费云端默认关闭",
+    "NOVA_PERSONA_CONFIG_DIR": "必须为空或只读、已审核人格配置目录；默认使用包内版本",
     "NOVA_QWEN38_ENABLED": "必须为布尔值，实验模型默认关闭",
     "NOVA_QWEN38_MODEL": "必须为公开hf.co/namespace/repo:tag标识，不允许本机路径或URL",
     "NOVA_QWEN38_CONTEXT": "必须为512至8192的整数，初始4096",

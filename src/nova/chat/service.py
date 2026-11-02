@@ -5,12 +5,14 @@ import logging
 import time
 
 from nova.chat.cloud import DeepSeekBackend
+from nova.chat.orchestrator import SYSTEM_MESSAGE as SYSTEM_MESSAGE
+from nova.chat.orchestrator import ConversationOrchestrator
 from nova.chat.registry import ModelRegistry
 from nova.errors import ApplicationError
 from nova.gpu.backend import BackendError, StreamControl
+from nova.persona import PersonaConfigError, PersonaManager
 
 logger = logging.getLogger("nova.chat")
-SYSTEM_MESSAGE = "你是Nova，一位温暖、诚实、务实的中文AI助手。清楚区分已知事实和不确定信息。"
 
 
 class ChatService:
@@ -25,6 +27,14 @@ class ChatService:
         self._preparing = set()
         self._requests = {}
         self._cancel_tombstones = {}
+        self.last_metrics = None
+        try:
+            self.orchestrator = ConversationOrchestrator(
+                PersonaManager(settings.persona_config_dir)
+            )
+        except PersonaConfigError:
+            # 人格不可用只拒绝新生成，健康、历史和已完成重放仍可用。
+            self.orchestrator = None
 
     async def open(self, thread_id, model, content, request_id, cloud_consent=False, *, think=None):
         key = (thread_id, request_id)
@@ -123,11 +133,30 @@ class ChatService:
             output.put_nowait({"type": "delta", "text": message["content"]})
             output.put_nowait({"type": "done", "message": message})
             return output
+        if self.orchestrator is None:
+            raise ApplicationError("PERSONA_UNAVAILABLE", "人格配置不可用，请检查已审核版本", 503)
         entry = await self._resolve(model)
         if entry["provider"] == "deepseek":
             self.registry.require_cloud(cloud_consent)
         await asyncio.to_thread(self.store.get_thread, thread_id)
         history = await asyncio.to_thread(self.store.get_messages, thread_id)
+        runtime = entry.get("policy", {}).get("runtime", {})
+        prepared = self.orchestrator.build(
+            thread_id,
+            history,
+            content,
+            context_tokens=runtime.get("num_ctx", 4096),
+            output_tokens=runtime.get("num_predict", 512),
+        )
+        record["context_metrics"] = {
+            "model": entry["id"],
+            "versions": prepared.versions,
+            "estimated_prompt_tokens": prepared.estimated_prompt_tokens,
+            "estimation_method": prepared.estimation_method,
+            "dropped_messages": prepared.dropped_messages,
+            "context_tokens": prepared.context_tokens,
+            "reserved_output_tokens": prepared.reserved_output_tokens,
+        }
         run = await asyncio.to_thread(self.store.begin_run, thread_id, model, content, request_id)
         meta = {
             "type": "meta",
@@ -150,23 +179,7 @@ class ChatService:
             output.put_nowait({"type": "error", "code": "CHAT_CANCELLED", "message": "生成已取消"})
             return output
 
-        # 初版采用有界的最近消息窗口；完整历史仍保留在SQLite，不发送客户端伪造历史。
-        prior = [
-            {"role": item["role"], "content": item["content"]}
-            for item in history
-            if item["status"] == "complete" and item["content"]
-        ]
-        selected, budget = [], 6000 - len(content)
-        for item in reversed(prior[-20:]):
-            if len(item["content"]) > budget:
-                break
-            selected.insert(0, item)
-            budget -= len(item["content"])
-        messages = [
-            {"role": "system", "content": SYSTEM_MESSAGE},
-            *selected,
-            {"role": "user", "content": content},
-        ]
+        messages = prepared.messages
         try:
             if entry["provider"] == "ollama":
                 kwargs = {"control": record["control"]}
@@ -201,6 +214,9 @@ class ChatService:
             raise
 
         record["producing"] = True
+        # 明确的输入摘录只是本会话临时数据，不由模型推断情绪或持久化人格。
+        topic = "".join(char for char in " ".join(content.split()) if ord(char) >= 32)[:120]
+        self.orchestrator.persona.dynamic.update(thread_id, topic=topic)
         task = asyncio.create_task(
             self._produce(
                 run["run_id"],
@@ -245,6 +261,7 @@ class ChatService:
             message = await asyncio.to_thread(
                 self.store.finish_run, run_id, result["response"], "complete", actual_model=model
             )
+            self.last_metrics = {**record["context_metrics"], **result.get("stats", {})}
             await output.put({"type": "done", "message": message})
         except Exception:
             logger.error("chat_persistence_or_stream_failed")
@@ -265,6 +282,12 @@ class ChatService:
         if self._runs:
             # 不取消上游线程，不在仍需保存消息时提前关闭数据库。
             await asyncio.gather(*tuple(self._runs), return_exceptions=True)
+        if self.orchestrator is not None:
+            self.orchestrator.persona.dynamic.clear()
+
+    def reset_dynamic(self, thread_id):
+        if self.orchestrator is not None:
+            self.orchestrator.persona.dynamic.reset(thread_id)
 
 
 async def read_events(queue):

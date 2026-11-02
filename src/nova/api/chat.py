@@ -93,6 +93,7 @@ async def rename(thread_id: UUID, body: RenameThread, chat: Chat):
 @router.delete("/threads/{thread_id}", status_code=204)
 async def delete(thread_id: UUID, chat: Chat):
     await asyncio.to_thread(chat.store.delete_thread, str(thread_id))
+    chat.reset_dynamic(str(thread_id))
     return Response(status_code=204)
 
 
