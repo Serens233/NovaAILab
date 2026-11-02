@@ -1,5 +1,28 @@
 # Nova 阶段验收
 
+## Codex 复审两项修复：实际验收通过（2026-11-02）
+
+用户明确授权修复后在测试通过时合并 PR #5/#6 至 `integration/v3-phase1`。在独立 worktree 追加提交，保留其他 Agent 原工作区；GitHub PR 状态为合并结果的权威来源。
+
+- P1：执行中的补偿卸载保持跟踪，关闭超时保留安全状态与实例锁。新增真实 `to_thread`/Event 回归在旧实现上 1 失败、1 通过，修后通过；覆盖重复关闭、第二实例拒绝、线程真实完成后释放。
+- P2：未知、空、非法目标一律在后端调用前返回 `MODEL_POLICY_INVALID`（503）；旧未知目标 15 项回归先全部失败，修后通过，另有 2 项 API 装配回归。旧测试显式登记合成资源策略，没有新增生产绕过开关。
+- 新增依赖为 0；锁文件及前端版本未改。为 Windows 干净检出补充前端扩展名 `eol=lf`，前端内容与 Git 原 blob 一致。初次 lint 因 CRLF 失败的日志保留，规范化后重验通过。
+
+| 实际检查与命令 | 结果 |
+| --- | --- |
+| `.venv/Scripts/python.exe -B -m pytest -p no:cacheprovider -ra` | **809 passed，0 failed，0 skipped**，15.84 秒，退出 0 |
+| `python -B -m ruff check --no-cache .` / `ruff format --check --no-cache .` | 均退出 0，107 文件格式通过 |
+| `python -B harness/check_project.py` / `git diff --check` | 五组 PASS、0 问题 / 退出 0 |
+| `uv lock --check` / `uv sync --locked --python <既有3.14.10解释器>` | 均退出 0，28 解析、27 安装；独立项目 `.venv` |
+| `npm ci --ignore-scripts --offline` | 退出 0，227 锁定包；未执行安装脚本或升级依赖 |
+| `npm run test` / `typecheck` / `lint` / `build` | **25 passed、0 failed、0 skipped**；其余均退出 0，构建 4.992 秒 |
+| `python -B harness/probe_auto_games.py --samples 3 --interval 5 --output <新文件>` | 退出 0，3 次未确认游戏；预热后采集无降级，属于只读采样 |
+| `python -B harness/verify_automatic_live.py --output-dir <新目录>` | **17 项真实 Ollama/GPU 检查通过**，退出 0；开启自动检测/压力守护，手动 GAMING、生成/wake 拒绝、卸载复核、数据库健康、重启保持和按需恢复通过；最终模型为空且验收后端正常退出 |
+
+全部原始日志位于 `E:\NovaAILab\logs\codex-v3-final-fix-20261102`：`pytest-final.txt`、`frontend-validation-summary.json`、`native-preflight.json`、`live-automatic-final/report.json`。日志、DB 和模型权重不进入 Git。
+
+当前 Windows 已实际可见约 32GB 级系统内存；本轮仅用既有 4B 做真实推理，没有加载 27B、训练、调用收费 API 或启动游戏。**真实游戏进程切换仍未验收**，不能用本次手动模式或替身回归代替。Phase 2 不在本次范围内。以下验收为历史记录。
+
 ## V3.0 Phase 1 合并阻断修复（2026-11-02，Asia/Shanghai）
 
 集成基线为 `integration/v3-phase1`（PR #1 `2124e45` + PR #2 `984b890` + PR #3 `4c8d71f`）。修复分支：`fix/v3-gpu-safety`（`de7e61f`，游戏排空补偿、取消回收、训练预留回滚）和 `fix/v3-chat-replay-contract`（`e708b30`，共享27B策略、只读重放、`MODEL_NOT_INSTALLED` 契约），后者基于前者。验收使用包含两分支的 `integration/v3-phase1-verified`（取该分支验收时的 HEAD）。

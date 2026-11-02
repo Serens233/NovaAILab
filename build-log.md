@@ -2,6 +2,14 @@
 
 日期按 Asia/Shanghai 记录。只写实际执行结果，不用计划替代命令。Phase 0 历史见 [进度记录](docs/progress.md)。
 
+## Codex 复审修复（2026-11-02）
+
+用户明确授权修复并在测试通过后合并 #5/#6。使用独立 `nova-codex-reclaim-fix`、`nova-codex-policy-fix` worktree；P1 线程回归先在旧实现失败，再提交 `9d10341` 修复；P2 未知策略 15 项先全红，补拒绝与 API 回归并提交 `c4e3df6`。合并两提交后实际运行 809 passed、0 failed、0 skipped（15.84秒），没有 xfail/skip 隐藏问题。
+
+沿原锁文件用既有 Python3.14.10 建立独立 `.venv`；uv lock/check 与 sync/locked 均0（28解析/27安装）。portable Node24.22.2/npm11.19.1 离线 `npm ci --ignore-scripts --offline` 安装227锁定包，未升级或执行远程脚本。前端25过、typecheck通过；初次lint因Windows CRLF检出失败，按原blob核实仅换行后恢复LF并补 `.gitattributes`，最终lint/build通过（4.992秒），前端源码/锁文件无内容diff。
+
+Ruff静态与107文件格式、工程自检五PASS、Git空白检查均0。只读3次本机信号均未确认游戏；随后 `verify_automatic_live.py` 真实17项全过（启用自动检测/压力守护），模型最终为空且自有验收后端正常关闭。没有启动游戏、加载27B、训练或云端收费调用；真实游戏切换保留未验收。原始证据在 `E:\NovaAILab\logs\codex-v3-final-fix-20261102`；验收及设计见 [ACCEPTANCE](docs/ACCEPTANCE.md)、[D018](docs/decisions.md)。
+
 ## V3实验27B接入（2026-11-01）
 
 实际项目已移到AI-Workspace/nova。开工备份123文件，git switch -c feat/qwen38-27b成功；main无提交、remote为空、Git身份未设，GitHub连接可见仓库为空，已询问用户缺失信息，未伪造提交或PR。
