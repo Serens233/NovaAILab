@@ -2,7 +2,7 @@
 
 ## V3.0 Phase 1 合并阻断修复（2026-11-02，Asia/Shanghai）
 
-集成基线为 `integration/v3-phase1`（PR #1 `2124e45` + PR #2 `984b890` + PR #3 `4c8d71f`）。修复分支：`fix/v3-gpu-safety`（`de7e61f`，游戏排空补偿、取消回收、训练预留回滚）和 `fix/v3-chat-replay-contract`（`e708b30`，共享27B策略、只读重放、`MODEL_NOT_INSTALLED` 契约），后者基于前者。验收使用包含两分支的 `integration/v3-phase1-verified`（`0fee37b`）。
+集成基线为 `integration/v3-phase1`（PR #1 `2124e45` + PR #2 `984b890` + PR #3 `4c8d71f`）。修复分支：`fix/v3-gpu-safety`（`de7e61f`，游戏排空补偿、取消回收、训练预留回滚）和 `fix/v3-chat-replay-contract`（`e708b30`，共享27B策略、只读重放、`MODEL_NOT_INSTALLED` 契约），后者基于前者。验收使用包含两分支的 `integration/v3-phase1-verified`（`206b4af`）。
 
 - Draft PR #5 GPU 安全：https://github.com/Serens233/NovaAILab/pull/5
 - Draft PR #6 聊天重放与错误契约（基于 #5）：https://github.com/Serens233/NovaAILab/pull/6
@@ -20,7 +20,7 @@
 | 16GB真实内存准入脚本 | 注册表、wake、generate 均在查询 tags 前返回 `MODEL_RAM_INSUFFICIENT`；未加载27B |
 | `git diff --check` | 退出0 |
 
-证据：pytest `E:\NovaAILab\logs\v3-merge-pytest-20261102-080846.txt`；Ruff `v3-merge-ruff-20261102-080859.txt`；自检 `v3-merge-selfcheck-20261102-080900.txt`；真实GPU `v3-merge-live-20261102-003208\report.json`；真实取消 `v3-merge-cancel-20261102-080601\cancel-report.json`；16GB准入 `v3-merge-16gb-20261102-080702.log`。
+证据：pytest `E:\NovaAILab\logs\v3-merge-final-pytest.txt`；自检 `v3-merge-final-selfcheck.txt`；真实GPU `v3-merge-live-20261102-003208\report.json`；真实取消 `v3-merge-cancel-20261102-080601\cancel-report.json`；16GB准入 `v3-merge-16gb-20261102-080702.log`；Ruff `v3-verified-final-pytest-20261102-082029.txt` 同文件尾部。
 
 **未执行/待验收**：未启动真实游戏，真实游戏进程切换仍待用户启动游戏后验收；手动GAMING切换、重启保持、生成/wake 423和卸载复核已由真实GPU脚本覆盖。前端 `typecheck`/`lint`/`build` 未执行：本机缺少已安装的 `node_modules` 和 npm 包管理器；仅运行了不依赖安装的 Node 单元测试。`uv lock --check`/`uv sync --locked` 未执行：本机 PATH 无 uv，测试使用既有 CPython 3.14.10 虚拟环境和 `PYTHONPATH=src`。
 
