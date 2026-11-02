@@ -283,7 +283,9 @@ class GpuManager:
             raise ApplicationError("MODEL_EXPERIMENT_DISABLED", "实验模型未启用，请选择9B或4B", 503)
         try:
             for key in ("required_mib", "min_total_ram_mib", "min_available_ram_mib"):
-                if type(policy[key]) is not int or policy[key] <= 0:
+                # 稳定模型没有实验RAM门槛，0表示不限制；显存需求仍必须为正。
+                minimum = 1 if key == "required_mib" else 0
+                if type(policy[key]) is not int or policy[key] < minimum:
                     raise ValueError
             runtime = dict(policy["runtime"])
             OllamaBackend.validate_runtime(runtime)
@@ -392,7 +394,8 @@ class GpuManager:
                 self._admit(preparing_task=task)
                 policy = await self._model_policy(target)
                 self._check_gpu_memory(before, models, target, policy["required_mib"])
-            kwargs = {} if policy is None else {"runtime": policy["runtime"]}
+            runtime = policy["runtime"] if policy else {}
+            kwargs = {} if not runtime else {"runtime": runtime}
             result = await (
                 self.backend.wake_model(**kwargs)
                 if action == "wake"
@@ -533,7 +536,8 @@ class GpuManager:
             self._preparing.discard(task)
             ready.set_result(None)
             started = True
-            kwargs = {} if policy is None else {"runtime": policy["runtime"]}
+            runtime = policy["runtime"] if policy else {}
+            kwargs = {} if not runtime else {"runtime": runtime}
             if think is not None:
                 kwargs["runtime"] = {**kwargs.get("runtime", {}), "think": think}
             if control is not None and getattr(self.backend, "supports_stream_control", False):

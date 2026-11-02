@@ -19,7 +19,7 @@ class ChatService:
         self.manager = manager
         self.settings = settings
         self.registry = ModelRegistry(settings, manager.backend)
-        self.manager.update_model_policies(self.registry.local_policies())
+        self.manager.update_model_policies(self.registry.gpu_policies())
         self.cloud = DeepSeekBackend(settings)
         self._runs = set()
         self._preparing = set()
@@ -98,7 +98,7 @@ class ChatService:
             self.manager._admit()
             entry = await self.registry.resolve(fallback)
             entry["fallback_reason"] = error.code
-        self.manager.update_model_policies(self.registry.local_policies())
+        self.manager.update_model_policies(self.registry.gpu_policies())
         return entry
 
     async def _prepare(self, thread_id, model, content, request_id, cloud_consent, think, record):

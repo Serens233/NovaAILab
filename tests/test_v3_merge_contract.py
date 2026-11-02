@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from nova.chat.registry import stable_policies
 from nova.config import QWEN38_MODEL, Settings
 from nova.errors import ApplicationError
 from nova.gpu.backend import ModelNotInstalledError
@@ -203,6 +204,30 @@ def test_disabled_experiment_and_vram_gate_apply_to_all_entrypoints(tmp_path, mo
             assert not any(call[0] in {"wake", "generate", "stream"} for call in limited.calls)
         finally:
             await gated.close()
+
+    asyncio.run(scenario())
+
+
+def test_stable_models_share_vram_policy_across_wake_generate_and_chat(tmp_path, monkeypatch):
+    monkeypatch.setattr("nova.gpu.resources.get_system_memory", enough_memory)
+
+    async def scenario():
+        backend = PolicyBackend()
+        backend.model = "qwen3.5:4b"
+        backend.memory["gpus"][0]["used_mib"] = 15000
+        manager = manager_for(tmp_path, backend, model_policies=stable_policies())
+        await manager.start()
+        try:
+            for operation in (manager.wake, lambda: manager.generate("合成问题")):
+                with pytest.raises(ApplicationError) as caught:
+                    await operation()
+                assert caught.value.code == "GPU_MEMORY_INSUFFICIENT"
+            with pytest.raises(ApplicationError) as caught:
+                await manager.open_chat_stream("qwen3.5:4b", MESSAGES, 5500)
+            assert caught.value.code == "GPU_MEMORY_INSUFFICIENT"
+            assert not any(call[0] in {"wake", "generate", "stream"} for call in backend.calls)
+        finally:
+            await manager.close()
 
     asyncio.run(scenario())
 
