@@ -10,7 +10,7 @@
 
 | 实际命令/检查 | 结果 |
 | --- | --- |
-| `python -B -m pytest -ra` | 退出0，**789 passed、0 failed、0 skipped**；两个 strict xfail 已删除并用回归覆盖 |
+| `python -B -m pytest -ra` | 退出0，**790 passed、0 failed、0 skipped**；两个 strict xfail 已删除并用回归覆盖 |
 | `python -B -m ruff check .` | 退出0，All checks passed |
 | `python -B -m ruff format --check .` | 退出0，107 files already formatted |
 | `python -B harness/check_project.py` | 退出0，五组 PASS、0 问题 |
