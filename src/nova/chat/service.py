@@ -19,6 +19,7 @@ class ChatService:
         self.manager = manager
         self.settings = settings
         self.registry = ModelRegistry(settings, manager.backend)
+        self.manager.update_model_policies(self.registry.gpu_policies())
         self.cloud = DeepSeekBackend(settings)
         self._runs = set()
         self._preparing = set()
@@ -65,26 +66,63 @@ class ChatService:
                 oldest = min(self._cancel_tombstones, key=self._cancel_tombstones.get)
                 self._cancel_tombstones.pop(oldest)
             self._cancel_tombstones[key] = now + 120
-        return {"cancel_requested": True, "state": "cancelling" if record else "marked", "request_id": request_id}
+        return {
+            "cancel_requested": True,
+            "state": "cancelling" if record else "marked",
+            "request_id": request_id,
+        }
 
     async def _resolve(self, model):
         if model != "deepseek":
             self.manager._admit()
         try:
-            entry = self.registry.get(model) if model == "deepseek" else await self.registry.resolve(model)
+            entry = (
+                self.registry.get(model)
+                if model == "deepseek"
+                else await self.registry.resolve(model)
+            )
         except ApplicationError as error:
             fallback = self.settings.chat_fallback_model
-            if model == "deepseek" or not fallback or fallback == model or error.code not in {
-                "MODEL_NOT_INSTALLED", "MODEL_RAM_INSUFFICIENT", "GPU_MEMORY_INSUFFICIENT",
-            }:
+            if (
+                model == "deepseek"
+                or not fallback
+                or fallback == model
+                or error.code
+                not in {
+                    "MODEL_NOT_INSTALLED",
+                    "MODEL_RAM_INSUFFICIENT",
+                    "GPU_MEMORY_INSUFFICIENT",
+                }
+            ):
                 raise
             self.manager._admit()
             entry = await self.registry.resolve(fallback)
             entry["fallback_reason"] = error.code
-        self.manager.update_model_policies(self.registry.local_policies())
+        self.manager.update_model_policies(self.registry.gpu_policies())
         return entry
 
     async def _prepare(self, thread_id, model, content, request_id, cloud_consent, think, record):
+        # 先只读校验请求身份并查找已完成结果：命中时不得查询Ollama、检查资源或启动生成。
+        replay = await asyncio.to_thread(
+            self.store.get_completed_run, thread_id, model, content, request_id
+        )
+        if replay is not None:
+            message = replay["assistant_message"]
+            output = asyncio.Queue()
+            output.put_nowait(
+                {
+                    "type": "meta",
+                    "thread_id": thread_id,
+                    "user_message_id": replay["user_message"]["id"],
+                    "assistant_message_id": message["id"],
+                    "model": message["model"],
+                    "requested_model": model,
+                    "fallback_reason": None,
+                }
+            )
+            output.put_nowait({"type": "delta", "text": message["content"]})
+            output.put_nowait({"type": "done", "message": message})
+            return output
         entry = await self._resolve(model)
         if entry["provider"] == "deepseek":
             self.registry.require_cloud(cloud_consent)
@@ -141,7 +179,11 @@ class ChatService:
                     )
                 except ApplicationError as error:
                     fallback = self.settings.chat_fallback_model
-                    if error.code != "GPU_MEMORY_INSUFFICIENT" or not fallback or fallback == entry["id"]:
+                    if (
+                        error.code != "GPU_MEMORY_INSUFFICIENT"
+                        or not fallback
+                        or fallback == entry["id"]
+                    ):
                         raise
                     self.manager._admit()
                     entry = await self._resolve(fallback)
@@ -150,17 +192,26 @@ class ChatService:
                         entry["id"], messages, entry["required_mib"], **kwargs
                     )
             else:
-                upstream, worker = await self.cloud.open_chat_stream(messages, control=record["control"])
+                upstream, worker = await self.cloud.open_chat_stream(
+                    messages, control=record["control"]
+                )
         except Exception:
             status = "interrupted" if record["control"].requested else "error"
             await asyncio.to_thread(self.store.finish_run, run["run_id"], "", status)
             raise
 
         record["producing"] = True
-        task = asyncio.create_task(self._produce(
-            run["run_id"], upstream, worker, output, record,
-            (thread_id, request_id), entry["id"],
-        ))
+        task = asyncio.create_task(
+            self._produce(
+                run["run_id"],
+                upstream,
+                worker,
+                output,
+                record,
+                (thread_id, request_id),
+                entry["id"],
+            )
+        )
         self._runs.add(task)
         task.add_done_callback(self._runs.discard)
         return output

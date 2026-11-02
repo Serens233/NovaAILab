@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from nova.chat.registry import experimental_policy
+from nova.chat.registry import experimental_policy, stable_policies
 from nova.config import Settings
 from nova.errors import ApplicationError
 from nova.gpu import resources
@@ -86,6 +86,7 @@ class SchedulerBackend:
 
 
 def manager_for(tmp_path, backend, **kwargs):
+    kwargs.setdefault("model_policies", stable_policies())
     return GpuManager(
         backend, tmp_path / "gpu-mode.json", drain_timeout=2, unload_timeout=0.1, **kwargs
     )

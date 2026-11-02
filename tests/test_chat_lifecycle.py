@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from nova.chat.registry import stable_policies
 from nova.chat.service import ChatService, idle_monitor
 from nova.config import Settings
 from nova.gpu.backend import BackendError
@@ -74,7 +75,9 @@ def test_cancelled_open_during_preflight_still_finishes_and_persists(tmp_path):
         await asyncio.to_thread(store.initialize)
         thread = await asyncio.to_thread(store.create_thread)
         backend = PreparationBackend()
-        manager = GpuManager(backend, settings.data_dir / "gpu-mode.json")
+        manager = GpuManager(
+            backend, settings.data_dir / "gpu-mode.json", model_policies=stable_policies()
+        )
         service = ChatService(store, manager, settings)
         await manager.start()
         caller = asyncio.create_task(

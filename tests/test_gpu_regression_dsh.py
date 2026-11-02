@@ -14,6 +14,7 @@ from uuid import uuid4
 
 import pytest
 
+from nova.chat.registry import stable_policies
 from nova.errors import ApplicationError
 from nova.gpu.backend import BackendError, StreamControl
 from nova.gpu.detection import GameDetector
@@ -130,6 +131,7 @@ class FakeBackend:
 
 
 def manager_for(tmp_path, backend, **kwargs):
+    kwargs.setdefault("model_policies", stable_policies())
     kwargs.setdefault("drain_timeout", 1.0)
     kwargs.setdefault("unload_timeout", 1.0)
     return GpuManager(backend, tmp_path / "gpu-mode.json", **kwargs)

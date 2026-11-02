@@ -36,6 +36,19 @@ class ProcessSource:
         return set(self.names)
 
 
+def practice_policy():
+    return {
+        "practice:tiny": {
+            "model": "practice:tiny",
+            "enabled": True,
+            "required_mib": 1,
+            "min_total_ram_mib": 0,
+            "min_available_ram_mib": 0,
+            "runtime": {},
+        }
+    }
+
+
 class FakeBackend:
     model = "practice:tiny"
 
@@ -50,7 +63,7 @@ class FakeBackend:
         return [dict(model) for model in self.models]
 
     async def get_gpu_memory_usage(self):
-        return {"available": True, "gpus": []}
+        return {"available": True, "gpus": [{"index": 0, "total_mib": 16311, "used_mib": 1000}]}
 
     async def unload_model(self, name):
         self.unloads += 1
@@ -72,7 +85,12 @@ class FakeBackend:
 
 def prepare(tmp_path, names=()):
     source, clock, backend = ProcessSource(names), Clock(), FakeBackend()
-    manager = GpuManager(backend, tmp_path / "gpu-mode.json", detection_enabled=True)
+    manager = GpuManager(
+        backend,
+        tmp_path / "gpu-mode.json",
+        detection_enabled=True,
+        model_policies=practice_policy(),
+    )
     detector = GameDetector(
         manager, ["practice-game.exe"], scan=source, clock=clock, interval=5, exit_grace=60
     )

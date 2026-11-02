@@ -13,9 +13,16 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from nova.errors import ApplicationError
-from nova.gpu.backend import BackendError, CancelledBackendError, OllamaBackend, model_allocation
+from nova.gpu.backend import (
+    BackendError,
+    CancelledBackendError,
+    ModelNotInstalledError,
+    OllamaBackend,
+    model_allocation,
+)
 from nova.gpu.protocol import ModelBackend
 from nova.gpu.resources import get_system_memory, require_system_memory
+from nova.model_policy import is_qwen38_alias, looks_like_qwen38
 
 logger = logging.getLogger("nova.gpu")
 
@@ -66,9 +73,14 @@ class GpuManager:
         detection_enabled=False,
         pressure_enabled=False,
         model_policies=None,
+        experimental_policy=None,
     ):
         self.backend = backend
         self.model_policies = dict(model_policies or {})
+        # 注册表模板让尚未被发现的27B标签也继承同一门禁，不能因查不到键而放行。
+        self.experimental_policy = (
+            dict(experimental_policy) if isinstance(experimental_policy, dict) else None
+        )
         self.state_path = Path(state_path)
         self.drain_timeout = drain_timeout
         self.unload_timeout = unload_timeout
@@ -236,10 +248,10 @@ class GpuManager:
         """仅由服务端注册表装配；发现的别名必须继承完整实验门禁。"""
         self.model_policies.update(policies)
 
-    def _model_policy(self, model):
-        """实验模型策略由应用装配，不信任前端显存数字，也不驱逐后才检查RAM。"""
-        if not isinstance(model, str):
-            return None
+    async def _model_policy(self, model):
+        """所有加载入口必须具有显式资源策略，安装或命名本身不构成准入。"""
+        if not isinstance(model, str) or not model.strip():
+            raise ApplicationError("MODEL_POLICY_INVALID", "模型标识未匹配受控资源策略", 503)
         folded = model.casefold()
         matches = [
             policy
@@ -252,8 +264,22 @@ class GpuManager:
             )
         ]
         if not matches:
-            return None
-        policy = matches[0]
+            template = self.experimental_policy
+            if isinstance(template, dict) and is_qwen38_alias(model, template.get("model")):
+                # 实际量化标签/HF标识尚未被注册表快照收录时，仍使用同一模板。
+                policy = {
+                    **template,
+                    "model": model,
+                    "runtime": dict(template.get("runtime") or {}),
+                }
+            elif looks_like_qwen38(model):
+                raise ApplicationError("MODEL_POLICY_INVALID", "27B实验模型标识未匹配受控策略", 503)
+            else:
+                raise ApplicationError(
+                    "MODEL_POLICY_INVALID", "模型尚未登记资源策略，暂不允许加载", 503
+                )
+        else:
+            policy = matches[0]
         # Ollama可能规范化大小写；冲突的重复策略不能靠精确键优先绕过限制。
         if any(candidate != policy for candidate in matches[1:]):
             raise ApplicationError("MODEL_POLICY_INVALID", "实验模型资源配置冲突", 503)
@@ -261,7 +287,9 @@ class GpuManager:
             raise ApplicationError("MODEL_EXPERIMENT_DISABLED", "实验模型未启用，请选择9B或4B", 503)
         try:
             for key in ("required_mib", "min_total_ram_mib", "min_available_ram_mib"):
-                if type(policy[key]) is not int or policy[key] <= 0:
+                # 稳定模型没有实验RAM门槛，0表示不限制；显存需求仍必须为正。
+                minimum = 1 if key == "required_mib" else 0
+                if type(policy[key]) is not int or policy[key] < minimum:
                     raise ValueError
             runtime = dict(policy["runtime"])
             OllamaBackend.validate_runtime(runtime)
@@ -357,20 +385,21 @@ class GpuManager:
         task = asyncio.current_task()
         try:
             target = getattr(self.backend, "model", None)
-            policy = self._model_policy(target)
+            policy = await self._model_policy(target)
             # 一次只允许一个受管模型；外部模型不在这里擅自驱逐。
             models = await self.backend.get_model_status()
             if policy:
                 self._admit(preparing_task=task)
-                self._model_policy(target)
+                await self._model_policy(target)
             if target and any(item["name"] != target for item in models):
                 raise ApplicationError("GPU_MODEL_CONFLICT", "已有其他模型驻留，请先显式卸载", 409)
             before = await self.backend.get_gpu_memory_usage()
             if policy:
                 self._admit(preparing_task=task)
-                policy = self._model_policy(target)
+                policy = await self._model_policy(target)
                 self._check_gpu_memory(before, models, target, policy["required_mib"])
-            kwargs = {} if policy is None else {"runtime": policy["runtime"]}
+            runtime = policy["runtime"] if policy else {}
+            kwargs = {} if not runtime else {"runtime": runtime}
             result = await (
                 self.backend.wake_model(**kwargs)
                 if action == "wake"
@@ -388,6 +417,11 @@ class GpuManager:
             logger.info("gpu_model_request_completed", extra={"operation": action})
             self._audit()
             return result
+        except ModelNotInstalledError:
+            # 模型缺失是明确的准入失败，不是上游不确定故障，不能因此永久锁定。
+            raise ApplicationError(
+                "MODEL_NOT_INSTALLED", "模型尚未下载，不会自动下载", 503
+            ) from None
         except ApplicationError:
             raise
         except Exception, asyncio.CancelledError:
@@ -405,7 +439,7 @@ class GpuManager:
 
     async def _request(self, action, prompt=None):
         self._admit()
-        self._model_policy(getattr(self.backend, "model", None))
+        await self._model_policy(getattr(self.backend, "model", None))
         self.unload_verified = False
         # 先落盘“进行中”；进程异常退出后的下一次启动不能默认为安全 AUTO。
         self._persist(uncertain=True)
@@ -434,7 +468,7 @@ class GpuManager:
             raise ApplicationError("CHAT_CANCELLED", "生成已取消", 409)
         if think is not None and type(think) is not bool:
             raise ApplicationError("CHAT_THINK_INVALID", "思考模式必须为布尔值", 422)
-        policy = self._model_policy(model)
+        policy = await self._model_policy(model)
         if policy:
             required_mib = policy["required_mib"]
         if type(required_mib) is not int or not 1 <= required_mib <= 65536:
@@ -462,22 +496,22 @@ class GpuManager:
 
     async def _prepare_chat(self, model, required_mib):
         task = asyncio.current_task()
-        policy = self._model_policy(model)
+        policy = await self._model_policy(model)
         if policy:
             required_mib = policy["required_mib"]
         await self.backend.ensure_local_model(model)
         self._admit(preparing_task=task)
-        self._model_policy(model)
+        await self._model_policy(model)
         models = await self.backend.get_model_status()
         self._admit(preparing_task=task)
         if any(item["name"] != model for item in models):
-            self._model_policy(model)
+            await self._model_policy(model)
             # 游戏卸载可能正在等此任务结束，不能反过来排队等待其控制锁。
             if self._control.locked():
                 raise ApplicationError("GPU_TRANSITION_BUSY", "模型控制正忙，请稍后重试", 409)
             async with self._control:
                 self._admit(preparing_task=task)
-                self._model_policy(model)
+                await self._model_policy(model)
                 await self._unload("model_switch", preparing_task=task)
             self._admit(preparing_task=task)
             models = await self.backend.get_model_status()
@@ -485,7 +519,7 @@ class GpuManager:
                 raise ApplicationError("GPU_MODEL_CONFLICT", "模型切换未完成，请重试", 409)
         memory = await self.backend.get_gpu_memory_usage()
         self._admit(preparing_task=task)
-        self._model_policy(model)
+        await self._model_policy(model)
         # 同一NVIDIA设备口径，不将多卡余量相加。
         self._check_gpu_memory(memory, models, model, required_mib)
         return memory
@@ -502,11 +536,12 @@ class GpuManager:
             self._admit(preparing_task=task)
             if control is not None and control.requested:
                 raise ApplicationError("CHAT_CANCELLED", "生成已取消", 409)
-            policy = self._model_policy(model)
+            policy = await self._model_policy(model)
             self._preparing.discard(task)
             ready.set_result(None)
             started = True
-            kwargs = {} if policy is None else {"runtime": policy["runtime"]}
+            runtime = policy["runtime"] if policy else {}
+            kwargs = {} if not runtime else {"runtime": runtime}
             if think is not None:
                 kwargs["runtime"] = {**kwargs.get("runtime", {}), "think": think}
             if control is not None and getattr(self.backend, "supports_stream_control", False):
@@ -539,6 +574,9 @@ class GpuManager:
                 "gpu_after": await self.backend.get_gpu_memory_usage(),
             }
             self._audit()
+        except ModelNotInstalledError:
+            # 与注册表声明一致：缺失模型使用 MODEL_NOT_INSTALLED，且不写安全故障。
+            error = ApplicationError("MODEL_NOT_INSTALLED", "模型尚未下载，不会自动下载", 503)
         except CancelledBackendError:
             # HTTP线程已结束，但GPU释放仍需原卸载机制确认；不能仅凭断开连接放行。
             self.unload_verified = False

@@ -26,7 +26,10 @@ class FakeBackend:
         return [dict(model) for model in self.models]
 
     async def get_gpu_memory_usage(self):
-        return {"available": True, "gpus": [{"total_mib": 100, "used_mib": 10}]}
+        return {
+            "available": True,
+            "gpus": [{"index": 0, "total_mib": 16311, "used_mib": 1000}],
+        }
 
     async def unload_model(self, name):
         self.calls.append("unload")

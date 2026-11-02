@@ -6,6 +6,7 @@ from nova.config import QWEN38_MODEL as QWEN38_MODEL
 from nova.errors import ApplicationError
 from nova.gpu.backend import BackendError
 from nova.gpu.resources import require_system_memory
+from nova.model_policy import QWEN38_CANONICAL, is_qwen38_alias
 
 MODELS = {
     "qwen3.5:9b": {"label": "Qwen3.5 · 9B", "provider": "ollama", "required_mib": 9500},
@@ -13,21 +14,26 @@ MODELS = {
     "deepseek": {"label": "DeepSeek · 云端", "provider": "deepseek", "required_mib": 0},
 }
 _LOCAL_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]*(?::[A-Za-z0-9._-]+)?\Z")
-_QWEN38_GGUF = re.compile(
-    r"hf\.co/unsloth/Qwen3\.8-27B-GGUF:[A-Za-z0-9][A-Za-z0-9._-]*\Z", re.IGNORECASE
-)
-# 本机导入的量化标签形如 qwen3.8:27b-q3_k_xl；后缀仍走同一RAM/启用策略。
-_QWEN38_LOCAL = re.compile(r"qwen3\.8:27b-[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z", re.IGNORECASE)
 
 
 def _qwen38_alias(name):
-    if not isinstance(name, str) or name.casefold().endswith((":cloud", "-cloud")):
-        return False
-    return (
-        name.casefold() == "qwen3.8:27b"
-        or bool(_QWEN38_LOCAL.fullmatch(name))
-        or bool(_QWEN38_GGUF.fullmatch(name))
-    )
+    return is_qwen38_alias(name)
+
+
+def stable_policies():
+    """稳定本地模型也有固定显存需求；统一由GPU管理器校验，而不是跳过。"""
+    return {
+        name: {
+            "model": name,
+            "enabled": True,
+            "required_mib": entry["required_mib"],
+            "min_total_ram_mib": 0,
+            "min_available_ram_mib": 0,
+            "runtime": {},
+        }
+        for name, entry in MODELS.items()
+        if entry["provider"] == "ollama"
+    }
 
 
 def experimental_policy(settings):
@@ -101,12 +107,16 @@ class ModelRegistry:
         return {"installed": sorted(installed), "reachable": reachable}
 
     def local_policies(self):
-        """实际别名全部复制同一RAM/启用/运行参数策略，供唯一GPU管理器装配。"""
+        """实际27B别名复制同一RAM/启用/运行参数策略。"""
         return {
             model: {**self.policy, "model": model, "runtime": dict(self.policy["runtime"])}
             for model, entry in self.entries.items()
             if entry.get("experimental")
         }
+
+    def gpu_policies(self):
+        """稳定模型和实际27B别名共用一份策略，供唯一GPU管理器装配。"""
+        return {**stable_policies(), **self.local_policies()}
 
     def _installed_experiments(self):
         return sorted(
@@ -116,7 +126,7 @@ class ModelRegistry:
                 if entry.get("experimental") and model in self.installed
             ),
             key=lambda model: (
-                model.casefold() != "qwen3.8:27b",
+                model.casefold() != QWEN38_CANONICAL,
                 model != self.policy["model"],
                 model.casefold(),
                 model,
@@ -124,9 +134,7 @@ class ModelRegistry:
         )
 
     def _is_experimental(self, name):
-        return isinstance(name, str) and (
-            name.casefold() == self.policy["model"].casefold() or _qwen38_alias(name)
-        )
+        return is_qwen38_alias(name, self.policy["model"])
 
     def _require_experiment_enabled(self):
         if not self.policy["enabled"]:

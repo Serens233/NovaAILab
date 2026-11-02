@@ -77,7 +77,8 @@ class Source:
 
 
 class Backend:
-    model = "practice:tiny"
+    # 与应用工厂中的稳定模型策略一致，不靠未知模型跳过资源门禁。
+    model = "qwen3.5:4b"
 
     def __init__(self):
         self.models = [{"name": self.model, "size_vram": 123}]
@@ -88,7 +89,7 @@ class Backend:
         return copy.deepcopy(self.models)
 
     async def get_gpu_memory_usage(self):
-        return {"available": True, "gpus": []}
+        return {"available": True, "gpus": [{"index": 0, "total_mib": 16311, "used_mib": 1000}]}
 
     async def unload_model(self, name):
         self.models = []

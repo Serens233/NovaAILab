@@ -1,5 +1,52 @@
 # Nova 阶段验收
 
+## Codex 复审两项修复：实际验收通过（2026-11-02）
+
+用户明确授权修复后在测试通过时合并 PR #5/#6 至 `integration/v3-phase1`。在独立 worktree 追加提交，保留其他 Agent 原工作区；GitHub PR 状态为合并结果的权威来源。
+
+- P1：执行中的补偿卸载保持跟踪，关闭超时保留安全状态与实例锁。新增真实 `to_thread`/Event 回归在旧实现上 1 失败、1 通过，修后通过；覆盖重复关闭、第二实例拒绝、线程真实完成后释放。
+- P2：未知、空、非法目标一律在后端调用前返回 `MODEL_POLICY_INVALID`（503）；旧未知目标 15 项回归先全部失败，修后通过，另有 2 项 API 装配回归。旧测试显式登记合成资源策略，没有新增生产绕过开关。
+- 新增依赖为 0；锁文件及前端版本未改。为 Windows 干净检出补充前端扩展名 `eol=lf`，前端内容与 Git 原 blob 一致。初次 lint 因 CRLF 失败的日志保留，规范化后重验通过。
+
+| 实际检查与命令 | 结果 |
+| --- | --- |
+| `.venv/Scripts/python.exe -B -m pytest -p no:cacheprovider -ra` | **809 passed，0 failed，0 skipped**，15.84 秒，退出 0 |
+| `python -B -m ruff check --no-cache .` / `ruff format --check --no-cache .` | 均退出 0，107 文件格式通过 |
+| `python -B harness/check_project.py` / `git diff --check` | 五组 PASS、0 问题 / 退出 0 |
+| `uv lock --check` / `uv sync --locked --python <既有3.14.10解释器>` | 均退出 0，28 解析、27 安装；独立项目 `.venv` |
+| `npm ci --ignore-scripts --offline` | 退出 0，227 锁定包；未执行安装脚本或升级依赖 |
+| `npm run test` / `typecheck` / `lint` / `build` | **25 passed、0 failed、0 skipped**；其余均退出 0，构建 4.992 秒 |
+| `python -B harness/probe_auto_games.py --samples 3 --interval 5 --output <新文件>` | 退出 0，3 次未确认游戏；预热后采集无降级，属于只读采样 |
+| `python -B harness/verify_automatic_live.py --output-dir <新目录>` | **17 项真实 Ollama/GPU 检查通过**，退出 0；开启自动检测/压力守护，手动 GAMING、生成/wake 拒绝、卸载复核、数据库健康、重启保持和按需恢复通过；最终模型为空且验收后端正常退出 |
+
+全部原始日志位于 `E:\NovaAILab\logs\codex-v3-final-fix-20261102`：`pytest-final.txt`、`frontend-validation-summary.json`、`native-preflight.json`、`live-automatic-final/report.json`。日志、DB 和模型权重不进入 Git。
+
+当前 Windows 已实际可见约 32GB 级系统内存；本轮仅用既有 4B 做真实推理，没有加载 27B、训练、调用收费 API 或启动游戏。**真实游戏进程切换仍未验收**，不能用本次手动模式或替身回归代替。Phase 2 不在本次范围内。以下验收为历史记录。
+
+## V3.0 Phase 1 合并阻断修复（2026-11-02，Asia/Shanghai）
+
+集成基线为 `integration/v3-phase1`（PR #1 `2124e45` + PR #2 `984b890` + PR #3 `4c8d71f`）。修复分支：`fix/v3-gpu-safety`（`de7e61f`，游戏排空补偿、取消回收、训练预留回滚）和 `fix/v3-chat-replay-contract`（`e708b30`，共享27B策略、只读重放、`MODEL_NOT_INSTALLED` 契约），后者基于前者。验收使用包含两分支的 `integration/v3-phase1-verified`（取该分支验收时的 HEAD）。
+
+- Draft PR #5 GPU 安全：https://github.com/Serens233/NovaAILab/pull/5
+- Draft PR #6 聊天重放与错误契约（基于 #5）：https://github.com/Serens233/NovaAILab/pull/6
+- 两个 PR 均保持 Draft，不自动合并 main；#5 合并后需把 #6 base 改为 `integration/v3-phase1`。
+
+| 实际命令/检查 | 结果 |
+| --- | --- |
+| `python -B -m pytest -ra` | 退出0，**790 passed、0 failed、0 skipped**；两个 strict xfail 已删除并用回归覆盖 |
+| `python -B -m ruff check .` | 退出0，All checks passed |
+| `python -B -m ruff format --check .` | 退出0，107 files already formatted |
+| `python -B harness/check_project.py` | 退出0，五组 PASS、0 问题 |
+| 前端 `node --test tests/*.test.mjs` | 退出0，25 passed、0 failed、0 skipped |
+| `harness/verify_gpu_live.py --output-dir <新目录>` | 退出0，17项真实Ollama/GPU检查通过 |
+| 真实取消复核脚本 | 5项通过：取消返回 `CHAT_CANCELLED`、卸载复核、`/api/ps=[]`、故障清除、无待办卸载 |
+| 16GB真实内存准入脚本 | 注册表、wake、generate 均在查询 tags 前返回 `MODEL_RAM_INSUFFICIENT`；未加载27B |
+| `git diff --check` | 退出0 |
+
+证据：pytest `E:\NovaAILab\logs\v3-merge-final-pytest.txt`；自检 `v3-merge-final-selfcheck.txt`；真实GPU `v3-merge-live-20261102-003208\report.json`；真实取消 `v3-merge-cancel-20261102-080601\cancel-report.json`；16GB准入 `v3-merge-16gb-20261102-080702.log`；Ruff `v3-verified-final-pytest-20261102-082029.txt` 同文件尾部。
+
+**未执行/待验收**：未启动真实游戏，真实游戏进程切换仍待用户启动游戏后验收；手动GAMING切换、重启保持、生成/wake 423和卸载复核已由真实GPU脚本覆盖。前端 `typecheck`/`lint`/`build` 未执行：本机缺少已安装的 `node_modules` 和 npm 包管理器；仅运行了不依赖安装的 Node 单元测试。`uv lock --check`/`uv sync --locked` 未执行：本机 PATH 无 uv，测试使用既有 CPython 3.14.10 虚拟环境和 `PYTHONPATH=src`。
+
 ## V3实验接入：代码/安全检查通过，下载及真实27B推理待验
 
 2026-11-01。`python -B -m pytest -ra`实际658 passed、0 failed、0 skipped，11.88秒；前端npm test17项通过，Ruff静态与98文件格式通过。工程自检五组PASS。原模型/API回归保留，新增实验项默认关闭及9B默认不变。
