@@ -359,6 +359,7 @@ def replay_app(monkeypatch, tmp_path):
             chat_enabled=True,
             gpu_enabled=True,
             gpu_token=SecretStr(TOKEN),
+            chat_fallback_model="qwen3.5:4b",
             data_dir=tmp_path / "state",
             database_path=tmp_path / "data" / "nova.sqlite3",
         )
@@ -382,6 +383,25 @@ def _payload(thread_id, **overrides):
     }
     body.update(overrides)
     return body
+
+
+def test_gaming_blocks_configured_fallback_before_loading(replay_app):
+    app, backend = replay_app
+    with TestClient(app) as client:
+        thread_id = _thread(client)
+        assert (
+            client.post("/api/gpu/mode", json={"mode": "GAMING"}, headers=AUTH).status_code == 200
+        )
+        before = (len(backend.ensured), len(backend.stream_calls), len(backend.unload_calls))
+        denied = client.post("/api/v1/chat", json=_payload(thread_id), headers=AUTH)
+        assert denied.status_code == 423
+        assert denied.json()["error"]["code"] == "GPU_GAMING"
+        assert before == (
+            len(backend.ensured),
+            len(backend.stream_calls),
+            len(backend.unload_calls),
+        )
+        assert backend.loaded == []
 
 
 def test_completed_replay_runs_before_gaming_and_resource_admission(replay_app):
