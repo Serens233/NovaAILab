@@ -1,53 +1,33 @@
 # Nova
 
-Nova 是定位于“陪伴 + 成长 + 助手”的个人 AI 助手，目标是具有稳定人格、用户可控的长期记忆和受权限约束的工具执行能力。
+Nova 是面向个人的“陪伴 + 成长 + 助手”项目。当前 V3.0 Phase 1 已有 FastAPI、Ollama 模型路由、SQLite 会话历史、GPU 游戏保护与 Next.js Web；角色核心、长期记忆和成长机制仍属后续阶段。
 
-**V3实验27B接入（2026-11-01）**：Qwen3.8-27B作为默认关闭的可选模型，9B/4B保留。用户选择后台下载；当前16GB系统RAM禁止加载，实际27B性能与下载校验尚未完成。代码658项及前端17项通过，Git发布缺少仓库/身份信息。当前仓库位于`AI-Workspace/nova`；启动、配置、卸载、回退和实际证据见[27B部署记录](docs/qwen38-deployment.md)，下方旧绝对路径为历史。
+本轮基于 GitHub `integration/v3-phase1` 做整体验收与精简。实际覆盖、失败和待验收项见 [阶段验收](docs/ACCEPTANCE.md)，不能把合成测试、手动 GAMING 或旧记录当作本次真实游戏验证。
 
-**Nova V2 本机Web版本（2026-11-01）**：独立Next.js/React/TypeScript + assistant-ui界面，FastAPI流式聊天、9B/4B注册切换、原SQLite会话历史与GPU保护接通。DeepSeek默认关闭，不自动收费回退。安装、启动、接口和边界见 [V2说明](docs/nova-v2.md)，实际验收状态以 [阶段验收](docs/ACCEPTANCE.md) 为准。
+## Windows 快速开始
 
-```powershell
-Set-Location 'C:\Users\Administrator\Documents\Codex\nova'
-.\.venv\Scripts\python.exe -B harness\run_web.py
-# 打开 http://127.0.0.1:3000；输入回车或Ctrl+C正常停止。
-```
-
-以下为原版本历史记录；CS2核心链路已有 [实机补充验收](docs/cs2-live-acceptance.md)。
-
-**无白名单升级已完成代码和自动回归（2026-11-01）**：自动读取GameConfigStore/Steam/Epic，组合前台/渲染/按进程GPU信号，增加独立显存压力保护；411项测试及开启新模式的17项真实Ollama回合通过，无新增依赖。无需维护EXE名单，启用方法见 [自动识别说明](docs/automatic-game-detection.md)。CS2和《红色沙漠》的实机运行测试仍待用户启动，不标为全部验收完成。下文保留旧版本历史。
-
-**游戏白名单检测已完成开发和模拟验收（2026-11-01）**：5–10秒巡检、游戏退出持续60秒后恢复AUTO、手动GAMING独立保持。全量266项测试及15项本机模拟进程/Ollama检查通过，无新增依赖。真实游戏EXE尚待用户提供，默认保持关闭和空白名单，配置方法见 [游戏检测说明](docs/game-detection.md)。
-
-**GPU 管理第一轮已验收（2026-11-01）**：新增手动游戏模式、受控模型加载/卸载、显存与模型状态查询；194 项离线测试、17 项本机真实验收通过。默认关闭，启用方法和 CLI 见 [GPU 管理说明](docs/gpu-resource-manager.md)。自动游戏检测、训练暂停、空闲监测服务和 vLLM 尚未实现。原有 Phase 1 结果保留在下文。
-
-**Phase 1 后端基础架构已完成并通过本机验收**：FastAPI 应用、类型化配置、日志、统一异常、SQLite 基础及自动化测试。94 项测试通过，失败、跳过和警告均为 0；真实本地健康检查及数据库初始化通过。实际结果见 [阶段验收](docs/ACCEPTANCE.md)。尚未接入 DeepSeek、聊天、前端或长期记忆。
-
-## 快速开始（Windows PowerShell）
-
-打开项目目录：
+在实际仓库根目录打开 PowerShell。需要 CPython 3.14.10、uv 0.13.6、Node.js 24 和本机 Ollama；已有兼容工具无需重装，安装与路径说明见 [Windows 开发](docs/windows-development.md)。不要修改系统 Python。
 
 ```powershell
-Set-Location 'C:\Users\Administrator\Documents\Codex\nova'
-```
-
-本机 uv 安装在用户工具目录，以下设置只影响当前 PowerShell 会话：
-
-```powershell
-$env:Path = "$env:LOCALAPPDATA\Nova\tools\uv-0.13.6;$env:Path"
-uv --version
 uv sync --locked
-uv run --locked python -m nova
+Set-Location frontend
+npm ci --ignore-scripts
+npm run build
+Set-Location ..
+.\.venv\Scripts\python.exe -B harness\run_web.py --node-dir '<包含 node.exe 的目录>'
 ```
 
-在另一个 PowerShell 中检查：
+打开 `http://127.0.0.1:3000`，输入回车或 Ctrl+C 正常停止。启动器创建临时管理令牌，只传给前后端进程；默认启用游戏检测和显存压力守护，保留本地 `data/`。默认便携 Node 位置见脚本 `--help`，可以用 `--node-dir` 指定，不依赖旧仓库绝对路径。
+
+只验证后端基础服务时运行：
 
 ```powershell
-Invoke-RestMethod -Uri 'http://127.0.0.1:8000/health'
+uv run --locked python -m nova
+# 在另一个终端检查
+Invoke-RestMethod 'http://127.0.0.1:8000/health'
 ```
 
-正常响应为 `{"status":"ok","database":"ok"}`。使用 Ctrl+C 停止服务。启动时按配置幂等初始化 SQLite，不需要 API Key；数据库无法初始化时启动失败，不假报健康。
-
-默认配置即可运行。需要本地配置时，确认 `.env` 尚不存在后才复制示例，避免覆盖已有配置：
+默认配置不启用聊天/GPU管理；健康响应为 `{"status":"ok","database":"ok"}`。需要本地配置时，先确认 `.env` 不存在再复制：
 
 ```powershell
 if (-not (Test-Path -LiteralPath '.env')) {
@@ -55,53 +35,41 @@ if (-not (Test-Path -LiteralPath '.env')) {
 }
 ```
 
-完整安装、复现、配置和排障见 [Windows 开发说明](docs/windows-development.md)。如只想初始化数据库而不启动服务器，使用 `uv run --locked python -m nova --init-db`。
+## 当前能力与边界
 
-## 文档入口
+- 稳定本地模型为 `qwen3.5:9b`、`qwen3.5:4b`；注册表识别实际已安装的27B规范/量化/HF标识，实验模型默认关闭，仍需通过RAM/显存准入，不自动下载。
+- 聊天支持 SSE、会话上下文、历史持久化和幂等重放；`think` 可配置，思考字段不进入聊天正文。停止按钮发显式取消，资源回收仍需后端确认。
+- 生产本地请求全部经过 GPU Manager：按需加载、180秒空闲卸载、游戏优先、压力保护和协作训练租约。AUTO恢复不预载；外部程序直连Ollama仍能绕过Nova，不是整机GPU隔离。
+- DeepSeek 已有可选Provider，默认关闭；后端启用且本次请求明确同意云端发送后才调用，无自动收费回退。
+- 当前是单机、单管理信任域。会话历史不是长期记忆；不同thread不等于多用户认证/隐私隔离。训练框架安全暂停、AI_FOCUS、vLLM、人格演化和主动工具尚未实现。
+- 运行数据、密钥、日志、模型、备份和虚拟环境不进入Git；不删除原有数据库或模型。
 
-| 文档 | 用途 |
-| --- | --- |
-| [AGENTS.md](AGENTS.md) | 代理与开发者的协作边界、密钥规范及验证规则 |
-| [GOALS.md](GOALS.md) | 产品目标、非目标和阶段成功定义 |
-| [PLANS.md](PLANS.md) | 当前阶段清单、退出条件和下一阶段入口 |
-| [架构说明](docs/architecture.md) | 模块职责、依赖方向、关键数据流 |
-| [技术决策](docs/decisions.md) | 选择理由、影响及重新评估条件 |
-| [阶段路线图](docs/roadmap.md) | 分阶段交付物、验收条件与退出标准 |
-| [质量规范](docs/quality.md) | 检查命令、测试策略、结果记录方式 |
-| [开发进度](docs/progress.md) | 真实执行结果、问题和遗留事项 |
-| [阶段验收](docs/ACCEPTANCE.md) | Phase 1 必需验收项与实际结果 |
-| [当前状态](harness/context/CURRENT_STATE.md) | 下一次工作前应读取的阶段上下文 |
-| [构建记录](build-log.md) | 依赖、命令、问题处理和结果索引 |
-| [工程自检](harness/README.md) | 自检脚本的范围与限制 |
-
-## 技术基线
-
-CPython 3.14.10，uv 0.13.6 管理项目内 `.venv`、可编辑应用包及 `uv.lock`；pytest 负责自动化测试，Ruff 负责格式与静态检查。Phase 0 的 pytest 9.1.1 和 Ruff 0.17.3 保持不变。
-
-本阶段使用 FastAPI、Uvicorn、Pydantic Settings 和标准库 sqlite3；HTTPX2 仅用于测试。使用 uv 原生构建后端进行 `src/nova` 可编辑安装，不发布包。没有引入 ORM、迁移框架或 Agent 框架；DeepSeek、Web 与 Flutter 仍属未来阶段。
-
-## 配置与数据
-
-配置优先级为进程环境变量高于本地 `.env`，高于默认值；路径以启动时当前工作目录为基准。`NOVA_HOST`、`NOVA_PORT` 和 `NOVA_LOG_LEVEL` 会用于实际启动。`.env` 可选，DeepSeek 相关变量只保留占位，当前不调用模型。真实密钥不能出现在源码、示例、日志或 Git 中。
-
-`.gitignore` 排除 `.env`、虚拟环境、数据库及其 WAL/SHM 文件、日志、数据和备份目录。`uv.lock` 与 `.env.example` 应被跟踪。忽略规则不能替代提交前差异审查。
-
-## 当前目录与未来模块
-
-`src/nova/` 保存后端代码，`tests/` 保存离线测试，`docs/` 与 `harness/` 保存工程文档和检查。运行后 `data/` 保存未纳入 Git 的 SQLite 文件；`.git/` 保存仓库元数据，`.venv/` 保存开发环境。`agent`、`persona`、`memory`、`providers`、`tools` 和 `web` 仍未实现。
-
-## 验证
+## 开发检查
 
 ```powershell
 uv lock --check
-uv sync --locked
 uv run --locked pytest -ra
 uv run --locked ruff check .
 uv run --locked ruff format --check .
 uv run --locked python harness/check_project.py
-git diff --check
-git status --short --branch
+Set-Location frontend
+npm test
+npm run typecheck
+npm run lint
+npm run build
 ```
 
-测试使用临时数据库和独立配置，不调用 DeepSeek。检查命令的实际执行结果以验收记录为准。Phase 1 验收后立即停止，由用户明确发起下一阶段。
+默认测试使用合成Provider和临时数据，不调用收费API或真实模型。真实Ollama/空闲/游戏采集工具位于 [harness](harness/README.md)，只在明确的本机验收中运行。
 
+## 文档与目录
+
+| 入口 | 用途 |
+| --- | --- |
+| [AGENTS.md](AGENTS.md) / [GOALS.md](GOALS.md) | 协作、安全规则与产品目标 |
+| [PLANS.md](PLANS.md) / [当前状态](harness/context/CURRENT_STATE.md) | 当前任务、边界和后续入口 |
+| [架构](docs/architecture.md) / [技术决策](docs/decisions.md) | 已实现模块、接口依赖及扩展约束 |
+| [验收](docs/ACCEPTANCE.md) / [构建记录](build-log.md) | 实际命令、结果、历史证据和未执行项 |
+| [前端](frontend/README.md) / [GPU](docs/gpu-resource-manager.md) | 使用方法、访问控制与保护边界 |
+| [质量](docs/quality.md) / [路线图](docs/roadmap.md) | 检查标准及需另行启动的后续阶段 |
+
+`src/nova/` 为后端；`frontend/` 为独立Web；`tests/` 为离线回归；`harness/` 为开发验收工具；`docs/` 保留架构、许可证研究和历史证据。未来模块按实际阶段建立，不提前创建空框架。

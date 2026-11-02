@@ -18,3 +18,22 @@ def isolated_environment(monkeypatch, tmp_path):
 @pytest.fixture
 def settings(tmp_path):
     return Settings(_env_file=None, database_path=tmp_path / "nova.sqlite3")
+
+
+@pytest.fixture
+def practice_policy():
+    """每次构造独立的合成模型策略，避免各测试模块共享可变状态。"""
+
+    def make():
+        return {
+            "practice:tiny": {
+                "model": "practice:tiny",
+                "enabled": True,
+                "required_mib": 1,
+                "min_total_ram_mib": 0,
+                "min_available_ram_mib": 0,
+                "runtime": {},
+            }
+        }
+
+    return make

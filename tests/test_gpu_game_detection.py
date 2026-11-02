@@ -36,19 +36,6 @@ class ProcessSource:
         return set(self.names)
 
 
-def practice_policy():
-    return {
-        "practice:tiny": {
-            "model": "practice:tiny",
-            "enabled": True,
-            "required_mib": 1,
-            "min_total_ram_mib": 0,
-            "min_available_ram_mib": 0,
-            "runtime": {},
-        }
-    }
-
-
 class FakeBackend:
     model = "practice:tiny"
 
@@ -83,21 +70,25 @@ class FakeBackend:
         return {"done": True}
 
 
-def prepare(tmp_path, names=()):
-    source, clock, backend = ProcessSource(names), Clock(), FakeBackend()
-    manager = GpuManager(
-        backend,
-        tmp_path / "gpu-mode.json",
-        detection_enabled=True,
-        model_policies=practice_policy(),
-    )
-    detector = GameDetector(
-        manager, ["practice-game.exe"], scan=source, clock=clock, interval=5, exit_grace=60
-    )
-    return source, clock, backend, manager, detector
+@pytest.fixture
+def prepare(practice_policy):
+    def make(tmp_path, names=()):
+        source, clock, backend = ProcessSource(names), Clock(), FakeBackend()
+        manager = GpuManager(
+            backend,
+            tmp_path / "gpu-mode.json",
+            detection_enabled=True,
+            model_policies=practice_policy(),
+        )
+        detector = GameDetector(
+            manager, ["practice-game.exe"], scan=source, clock=clock, interval=5, exit_grace=60
+        )
+        return source, clock, backend, manager, detector
+
+    return make
 
 
-def test_initial_scan_blocks_requests_until_healthy_snapshot_arrives(tmp_path):
+def test_initial_scan_blocks_requests_until_healthy_snapshot_arrives(tmp_path, prepare):
     async def scenario():
         source, _, backend, manager, detector = prepare(tmp_path)
         source.release = asyncio.Event()
@@ -125,7 +116,7 @@ def test_initial_scan_blocks_requests_until_healthy_snapshot_arrives(tmp_path):
     asyncio.run(scenario())
 
 
-def test_match_unloads_once_and_never_uses_gpu_activity_as_game_signal(tmp_path):
+def test_match_unloads_once_and_never_uses_gpu_activity_as_game_signal(tmp_path, prepare):
     async def scenario():
         source, _, backend, manager, detector = prepare(tmp_path, ["practice-game.exe"])
         await manager.start()
@@ -156,7 +147,7 @@ def test_match_unloads_once_and_never_uses_gpu_activity_as_game_signal(tmp_path)
     asyncio.run(scenario())
 
 
-def test_exit_requires_continuous_sixty_seconds_and_does_not_reload(tmp_path):
+def test_exit_requires_continuous_sixty_seconds_and_does_not_reload(tmp_path, prepare):
     async def scenario():
         source, clock, backend, manager, detector = prepare(tmp_path, ["practice-game.exe"])
         await manager.start()
@@ -185,7 +176,7 @@ def test_exit_requires_continuous_sixty_seconds_and_does_not_reload(tmp_path):
     asyncio.run(scenario())
 
 
-def test_game_reappearing_resets_exit_grace(tmp_path):
+def test_game_reappearing_resets_exit_grace(tmp_path, prepare):
     async def scenario():
         source, clock, _, manager, detector = prepare(tmp_path, ["practice-game.exe"])
         await manager.start()
@@ -217,7 +208,7 @@ def test_game_reappearing_resets_exit_grace(tmp_path):
     asyncio.run(scenario())
 
 
-def test_scan_failure_locks_once_and_resets_healthy_exit_grace(tmp_path):
+def test_scan_failure_locks_once_and_resets_healthy_exit_grace(tmp_path, prepare):
     async def scenario():
         source, clock, backend, manager, detector = prepare(tmp_path)
         await manager.start()
@@ -256,7 +247,7 @@ def test_scan_failure_locks_once_and_resets_healthy_exit_grace(tmp_path):
     asyncio.run(scenario())
 
 
-def test_saved_automatic_hold_requires_new_full_exit_grace_after_restart(tmp_path):
+def test_saved_automatic_hold_requires_new_full_exit_grace_after_restart(tmp_path, prepare):
     async def scenario():
         source, _, _, manager, detector = prepare(tmp_path, ["practice-game.exe"])
         await manager.start()
@@ -287,7 +278,7 @@ def test_saved_automatic_hold_requires_new_full_exit_grace_after_restart(tmp_pat
     asyncio.run(scenario())
 
 
-def test_successful_scans_cannot_clear_a_failed_unload_fault(tmp_path):
+def test_successful_scans_cannot_clear_a_failed_unload_fault(tmp_path, prepare):
     async def scenario():
         source, clock, backend, manager, detector = prepare(tmp_path, ["practice-game.exe"])
         backend.fail_unload = True
@@ -316,7 +307,7 @@ def test_successful_scans_cannot_clear_a_failed_unload_fault(tmp_path):
     asyncio.run(scenario())
 
 
-def test_stopping_detector_does_not_unlock_game_mode(tmp_path):
+def test_stopping_detector_does_not_unlock_game_mode(tmp_path, prepare):
     async def scenario():
         _, _, backend, manager, detector = prepare(tmp_path, ["practice-game.exe"])
         await manager.start()
@@ -337,7 +328,7 @@ def test_stopping_detector_does_not_unlock_game_mode(tmp_path):
     asyncio.run(scenario())
 
 
-def test_scan_finishing_after_stop_cannot_apply_stale_auto_recovery(tmp_path):
+def test_scan_finishing_after_stop_cannot_apply_stale_auto_recovery(tmp_path, prepare):
     async def scenario():
         source, clock, backend, manager, detector = prepare(tmp_path, ["practice-game.exe"])
         await manager.start()
@@ -372,7 +363,7 @@ def test_scan_finishing_after_stop_cannot_apply_stale_auto_recovery(tmp_path):
     asyncio.run(scenario())
 
 
-def test_overlapping_polls_serialize_snapshots_instead_of_releasing_a_new_game(tmp_path):
+def test_overlapping_polls_serialize_snapshots_instead_of_releasing_a_new_game(tmp_path, prepare):
     async def scenario():
         source, clock, backend, manager, detector = prepare(tmp_path, ["practice-game.exe"])
         entered, release = asyncio.Event(), asyncio.Event()

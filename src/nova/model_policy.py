@@ -19,11 +19,3 @@ def is_qwen38_alias(name, configured_model=None):
     if _LOCAL.fullmatch(name) or _QWEN38_GGUF.fullmatch(name):
         return True
     return isinstance(configured_model, str) and folded == configured_model.casefold()
-
-
-def looks_like_qwen38(name):
-    """识别未匹配白名单的27B近似标签，防止它们因查不到策略而绕过门禁。"""
-    if not isinstance(name, str):
-        return False
-    folded = name.casefold()
-    return "qwen3.8" in folded and "27b" in folded

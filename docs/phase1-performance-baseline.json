@@ -1,0 +1,38 @@
+{
+  "scope": "phase1 synthetic cold requests; not a throughput benchmark",
+  "model_calls": [
+    {
+      "case": "nine_b",
+      "model": "qwen3.5:9b",
+      "http_ttft_seconds": 49.051629,
+      "request_seconds": 50.316493,
+      "load_duration_ns": 28187756100,
+      "tokens_per_second": 10.52528172670755
+    },
+    {
+      "case": "four_b",
+      "model": "qwen3.5:4b",
+      "http_ttft_seconds": 52.444756,
+      "request_seconds": 53.526134,
+      "load_duration_ns": 25990968600,
+      "tokens_per_second": 8.24715060946443
+    },
+    {
+      "case": "nine_b_after_auto",
+      "model": "qwen3.5:9b",
+      "http_ttft_seconds": 46.461877,
+      "request_seconds": 47.603509,
+      "load_duration_ns": 28187756100,
+      "tokens_per_second": 10.52528172670755
+    }
+  ],
+  "idle_seconds": 182.722347,
+  "real_checks_passed": 29,
+  "not_verified": [
+    "real_game_transition",
+    "27b_inference",
+    "paid_cloud",
+    "browser_gui",
+    "mobile_browser"
+  ]
+}
