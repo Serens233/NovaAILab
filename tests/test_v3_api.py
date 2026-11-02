@@ -280,7 +280,8 @@ def test_missing_experiment_rejects_without_evicting_stable_model(factory, strea
         identity = thread(client)
         denied = client.post("/api/v1/chat", json=payload(identity, stream=stream), headers=AUTH)
         assert denied.status_code == 503
-        assert denied.json()["error"]["code"] == "GPU_PREFLIGHT_FAILED"
+        # 统一契约：本地模型缺失使用 MODEL_NOT_INSTALLED，不借用通用预检故障码。
+        assert denied.json()["error"]["code"] == "MODEL_NOT_INSTALLED"
         assert "SYNTHETIC_PRIVATE" not in denied.text
         assert backend.stream_calls == backend.unload_calls == []
         assert [model["name"] for model in backend.loaded] == ["qwen3.5:9b"]
@@ -343,11 +344,25 @@ def test_saved_experiment_reply_replays_without_reloading_under_low_ram(factory)
         body = payload(identity, stream=False)
         first = client.post("/api/v1/chat", json=body, headers=AUTH)
         assert first.status_code == 200
+        counts = (
+            backend.list_calls,
+            backend.status_calls,
+            len(backend.ensured),
+            len(backend.stream_calls),
+            len(backend.unload_calls),
+        )
         memory.update(total_mib=16384, available_mib=4096)
         second = client.post("/api/v1/chat", json=body, headers=AUTH)
         assert second.status_code == 200
         assert second.json() == first.json()
-        assert len(backend.stream_calls) == 1
+        # 只读重放：不查询 Ollama、不检查加载资源、不启动生成、不卸载。
+        assert counts == (
+            backend.list_calls,
+            backend.status_calls,
+            len(backend.ensured),
+            len(backend.stream_calls),
+            len(backend.unload_calls),
+        )
 
 
 def test_model_registry_does_not_replace_default_or_load_models(factory):

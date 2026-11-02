@@ -99,7 +99,11 @@ async def delete(thread_id: UUID, chat: Chat):
 @router.post("/chat")
 async def generate(body: ChatRequest, chat: Chat):
     queue = await chat.open(
-        str(body.thread_id), body.model, body.content, str(body.request_id), body.cloud_consent,
+        str(body.thread_id),
+        body.model,
+        body.content,
+        str(body.request_id),
+        body.cloud_consent,
         think=body.think,
     )
     if not body.stream:

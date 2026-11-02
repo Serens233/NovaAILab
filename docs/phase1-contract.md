@@ -112,6 +112,8 @@
 
 ## 6. 未完成项与接口变更请求（不自行扩大范围）
 
+> 2026-11-02 合并阻断修复（`fix/v3-chat-replay-contract`）：第 1 项已通过只读 `get_completed_run` 在资源解析前重放；第 2 项按统一契约保留 `MODEL_NOT_INSTALLED`（503）并同步服务端、测试和文档。以下为当时的交接记录，保留不改写。
+
 以下 4 个全量失败均需要修改本任务禁止的文件；本任务只报告，不代改：
 
 1. `tests/test_v3_api.py::test_saved_experiment_reply_replays_without_reloading_under_low_ram`

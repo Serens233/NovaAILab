@@ -38,6 +38,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             detection_enabled=settings.gpu_game_detection_enabled or settings.gpu_auto_game_enabled,
             pressure_enabled=settings.gpu_memory_pressure_enabled,
             model_policies={experimental["model"]: experimental},
+            # 与注册表共享同一模板，wake/generate/chat 都受实验开关、RAM和显存门禁。
+            experimental_policy=experimental,
         )
         if settings.gpu_enabled
         else None

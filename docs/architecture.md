@@ -137,6 +137,7 @@ VPS 部署阶段再引入进程管理、TLS、身份验证、备份与恢复演�
 ```text
 POST /api/v1/chat
   -> ChatService（历史、幂等、SSE事件队列）
+  -> 只读查询已完成 request_id；命中则直接重放，不进入资源准入
   -> ModelRegistry.resolve（启用/内存门禁 -> /api/tags -> 实际标识 -> 资源策略）
   -> GpuManager.open_chat_stream（准入、预检、显存/游戏/训练门禁）
   -> OllamaBackend.stream_chat（NDJSON、思考隔离、总时限、取消）
@@ -149,4 +150,7 @@ POST /api/v1/chat
 - **失败语义**：目录畸形/超量、非法 NDJSON、缺 `done`、空正文、超限、超时、取消和未闭合标签都返回固定公开错误，不携带上游原文、prompt、回复或密钥；取消只中断当前 socket，仍需管理器复核模型卸载，不能把客户端断开当作显存已释放。
 - **超时与取消**：绝对 deadline 覆盖整个流，慢速分块不能重置；`StreamControl` 以 socket shutdown 唤醒阻塞读取，并在取消后等待 HTTP 线程结束。云端使用固定 HTTPS 目标、180 秒总时限和 2 MiB 上限。
 - **接口边界**：`ModelBackend` 仅声明注册表所需的最小异步方法；本阶段不引入 SDK、微服务或 Agent 框架，也没有绕过 `GpuManager` 的 Provider 入口。
+- **共享27B策略**：`GpuManager` 接收注册表同一实验策略模板；无论请求来自 chat、`/api/wake`、`/api/generate` 还是后台任务，规范名、实际量化标签和 HF 标识都先经过实验开关、系统内存、显存、游戏和训练门禁，再调用 Ollama。未匹配模板的近似 27B 标签返回 `MODEL_POLICY_INVALID`，不能因查不到策略键而放行。
+- **完成请求重放**：认证和线程/request_id/正文/模型一致性校验通过后，先只读查询已完成结果；命中直接返回既有消息，不查询 Ollama、不检查加载资源、不启动生成，也不新增消息或 schema。未命中才进入模型解析与 GPU 准入。
+- **模型错误码**：`MODEL_UNKNOWN`（422）表示未注册；`MODEL_NOT_INSTALLED`（503）表示模型不在本机；`MODEL_EXPERIMENT_DISABLED`（503）表示 27B 实验开关关闭；`MODEL_RAM_INSUFFICIENT`（409）表示系统内存准入失败；`GPU_MEMORY_INSUFFICIENT`（409）表示显存不足；`GPU_GAMING`（423）表示游戏/安全锁定；`GPU_TRAINING_ACTIVE`（409）表示训练租约生效。缺失模型沿用 `MODEL_NOT_INSTALLED`，不再以通用 `GPU_PREFLIGHT_FAILED` 代替。
 - **离线 benchmark 例外**：`benchmarks/model_benchmark` 是受租约约束的离线测量工具，直接访问回环 Ollama，不是生产入口，也不替代 `GpuManager`。它默认 dry-run、默认拒绝卸载任何已驻留模型；只有租约显式列出这些模型并同时使用 `--allow-unload-loaded` 时才接管，结束后不恢复。租约、游戏/训练门禁、27B 准入或 Nova 配置任一无法确认时拒绝执行；生产 Provider 入口仍必须经过 `GpuManager`。
