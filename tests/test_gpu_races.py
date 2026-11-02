@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import threading
 
 import pytest
 
@@ -131,5 +132,101 @@ def test_close_retains_instance_lease_until_control_task_finishes(tmp_path):
             await asyncio.gather(control, return_exceptions=True)
             await manager.close()
             await competitor.close()
+
+    asyncio.run(scenario())
+
+
+class ThreadUnloadBackend:
+    """模拟urllib卸载线程：取消asyncio等待不会停止已经发出的请求。"""
+
+    def __init__(self):
+        self.entered = threading.Event()
+        self.release = threading.Event()
+        self.finished = threading.Event()
+        self.loaded = True
+
+    async def get_model_status(self):
+        return [{"name": "race:tiny", "size_vram": 123}] if self.loaded else []
+
+    async def get_gpu_memory_usage(self):
+        return {"available": True, "gpus": []}
+
+    async def unload_model(self, name):
+        def unload():
+            self.entered.set()
+            try:
+                if not self.release.wait(timeout=5):
+                    raise AssertionError("测试必须释放模拟卸载线程")
+                self.loaded = False
+                return {"done": True}
+            finally:
+                self.finished.set()
+
+        return await asyncio.to_thread(unload)
+
+
+def test_shutdown_tracks_reclaim_thread_until_it_really_finishes(tmp_path):
+    async def scenario():
+        backend = ThreadUnloadBackend()
+        manager = GpuManager(backend, tmp_path / "gpu-mode.json", drain_timeout=0.01)
+        competitor = GpuManager(backend, tmp_path / "gpu-mode.json", drain_timeout=0.01)
+        await manager.start()
+        manager.fault = "CANCELLED_AWAITING_UNLOAD"
+        manager._persist()
+        reclaim = manager._schedule_reclaim("task_cancelled")
+        try:
+            assert await asyncio.to_thread(backend.entered.wait, 1)
+            await asyncio.wait_for(manager.close(), timeout=1)
+            assert not backend.finished.is_set()
+            assert not reclaim.done(), "关闭不能丢弃仍在执行HTTP卸载的回收任务"
+            saved = json.loads(manager.state_path.read_text(encoding="utf-8"))
+            assert saved["uncertain"] is True
+            assert saved["fault"] == "SHUTDOWN_OPERATION_UNCERTAIN"
+            assert manager.blocked
+            with pytest.raises(RuntimeError, match="已有 GPU 调度实例"):
+                await competitor.start()
+
+            # 重复关闭也不能在真实请求结束前释放同一Ollama的实例租约。
+            await manager.close()
+            with pytest.raises(RuntimeError, match="已有 GPU 调度实例"):
+                await competitor.start()
+            backend.release.set()
+            await asyncio.wait_for(reclaim, timeout=1)
+            assert backend.finished.is_set()
+            assert not backend.loaded
+            assert manager.unload_verified
+            await manager.close()
+            await competitor.start()
+            assert competitor.mode == "GAMING"
+            assert competitor.blocked
+        finally:
+            backend.release.set()
+            await asyncio.gather(reclaim, return_exceptions=True)
+            await asyncio.to_thread(backend.finished.wait, 1)
+            await manager.close()
+            await competitor.close()
+
+    asyncio.run(scenario())
+
+
+def test_shutdown_cancels_reclaim_waiting_for_control_without_starting_io(tmp_path):
+    async def scenario():
+        backend = ThreadUnloadBackend()
+        manager = GpuManager(backend, tmp_path / "gpu-mode.json", drain_timeout=0.01)
+        await manager.start()
+        await manager._control.acquire()
+        reclaim = manager._schedule_reclaim("task_cancelled")
+        try:
+            await asyncio.sleep(0)
+            assert not reclaim.done()
+            await asyncio.wait_for(manager.close(), timeout=1)
+            assert reclaim.cancelled()
+            assert not backend.entered.is_set()
+            assert manager._lease.file is None
+        finally:
+            manager._control.release()
+            backend.release.set()
+            await asyncio.gather(reclaim, return_exceptions=True)
+            await manager.close()
 
     asyncio.run(scenario())

@@ -106,6 +106,8 @@ class GpuManager:
         self._controls = set()
         # 取消或排空超时后，卸载责任必须显式登记，不能靠“控制锁被占用”推断。
         self._reclaims = {}
+        # 已进入原卸载流程的回收可能持有to_thread HTTP，不能通过取消Future结束。
+        self._reclaim_io = set()
         self._idle = asyncio.Event()
         self._idle.set()
         self._control = asyncio.Lock()
@@ -621,7 +623,7 @@ class GpuManager:
     def _cancel_reclaims(self, *, exclude=None):
         """成功卸载后撤销其他待办；当前执行卸载的任务不能取消自己。"""
         for task in tuple(self._reclaims):
-            if task is not exclude and not task.done():
+            if task is not exclude and task not in self._reclaim_io and not task.done():
                 task.cancel()
 
     def _schedule_reclaim(self, reason):
@@ -668,7 +670,12 @@ class GpuManager:
                         self.manual_gaming or self.detected_gaming or self.mode == "GAMING"
                     ):
                         return
-                    await self._unload(reason, compensate=False)
+                    task = asyncio.current_task()
+                    self._reclaim_io.add(task)
+                    try:
+                        await self._unload(reason, compensate=False)
+                    finally:
+                        self._reclaim_io.discard(task)
                 return
             except asyncio.CancelledError:
                 raise
@@ -963,10 +970,11 @@ class GpuManager:
         self._closing = True
         reclaims = tuple(self._reclaims)
         for task in reclaims:
-            task.cancel()
-        if reclaims:
-            await asyncio.gather(*reclaims, return_exceptions=True)
-        tasks = self._active | self._controls
+            if task not in self._reclaim_io:
+                task.cancel()
+        # 等待/退避回收可取消；已执行的HTTP卸载和原控制任务一样必须保持跟踪。
+        # asyncio.wait超时不会取消其中的任务，尚未结束时也不释放实例租约。
+        tasks = self._active | self._controls | set(reclaims)
         pending = set()
         if tasks:
             _, pending = await asyncio.wait(tasks, timeout=self.drain_timeout)
