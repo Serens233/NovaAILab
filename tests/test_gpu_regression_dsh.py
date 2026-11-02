@@ -15,7 +15,7 @@ from uuid import uuid4
 import pytest
 
 from nova.errors import ApplicationError
-from nova.gpu.backend import BackendError
+from nova.gpu.backend import BackendError, StreamControl
 from nova.gpu.detection import GameDetector
 from nova.gpu.manager import GpuManager
 
@@ -306,14 +306,6 @@ def test_game_detection_waits_for_admitted_inference_then_unloads(tmp_path):
     asyncio.run(scenario())
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG-DSB-01: 游戏在推理期间被检测到且 drain 超时后，管理器写入 "
-        "UNLOAD_NOT_VERIFIED 并只尝试一次卸载；推理结束后不会重试，模型继续占用显存。"
-        "涉及 manager.py 的 _unload drain 分支与 detection.py 的首次动作触发卸载。"
-    ),
-)
 def test_game_detection_drain_timeout_retries_after_inference_finishes(tmp_path):
     async def scenario():
         backend = FakeBackend()
@@ -338,11 +330,15 @@ def test_game_detection_drain_timeout_retries_after_inference_finishes(tmp_path)
 
             backend.generate_release.set()
             await work
-            # 推理已经结束，游戏仍在；保护逻辑应当再次卸载残留模型。
+            # 推理已经结束，游戏仍在；补偿任务应复用原卸载流程并复核 /api/ps。
+            await wait_until(lambda: manager.unload_verified)
             await detector.poll_once()
             assert manager.detected_gaming is True
+            assert manager.fault is None
             assert backend.models == []
             assert backend.unload_calls >= 1
+            assert manager.last_operation["reason"] == "drain_timeout"
+            assert manager._reclaims == {}
         finally:
             backend.generate_release.set()
             if work is not None:
@@ -368,18 +364,22 @@ def test_manual_gaming_retry_recovers_after_drain_timeout(tmp_path):
             await asyncio.wait_for(backend.generate_started.wait(), timeout=1)
             source.names = {"probe-game.exe"}
             await detector.poll_once()
-            # 具体故障码由 BUG-DSB-01 修复决定；这里只要求门禁保持锁定且故障可诊断。
             assert manager.fault is not None
             assert manager.blocked is True
             assert backend.models
 
             backend.generate_release.set()
             await work
-            # 目前只能由人工再次进入 GAMING 触发重试；这是 Bug-DSB-01 的临时恢复路径。
+            # 补偿卸载自动执行，但不解除检测来源，也不自动恢复 AUTO。
+            await wait_until(lambda: manager.unload_verified)
+            assert manager.fault is None
+            assert manager.mode == "GAMING"
+            assert manager.detected_gaming is True
+
+            # 手动 GAMING 仍可显式进入并复核；随后才允许退出保护。
             result = await manager.set_mode("GAMING")
             assert result["unload_verified"] is True
             assert result["backend"]["models"] == []
-            assert manager.fault is None
             assert manager.manual_gaming is True
 
             await manager.set_detected_gaming(False, CLEAR_INFO)
@@ -577,15 +577,73 @@ def test_ollama_outage_degrades_and_recovers_without_stale_success(tmp_path):
     asyncio.run(scenario())
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG-DSB-02: claim_training 在写入租约状态失败时已经设置内存中的 "
-        "training_lease(preparing)，但没有清理；调用方拿不到 lease id，"
-        "release_training 又以 TRAINING_PREPARING 拒绝，GPU 入口只能靠重启恢复。"
-        "涉及 manager.py 的 claim_training 失败清理分支。"
-    ),
-)
+def test_cancel_while_auto_status_query_holds_control_defers_explicit_unload(tmp_path):
+    """AUTO 状态查询持锁时 Stop：不能假定锁持有者会卸载，必须登记回收任务。"""
+
+    class BlockingStatusBackend(FakeBackend):
+        def __init__(self):
+            super().__init__()
+            self.block_next_status = False
+            self.status_entered = asyncio.Event()
+            self.status_gate = asyncio.Event()
+
+        async def get_model_status(self):
+            if self.block_next_status:
+                self.block_next_status = False
+                self.status_entered.set()
+                await self.status_gate.wait()
+            return await super().get_model_status()
+
+    async def scenario():
+        backend = BlockingStatusBackend()
+        manager = manager_for(tmp_path, backend)
+        control = None
+        worker = auto = None
+        await manager.start()
+        try:
+            # 模拟 AUTO 状态查询在控制锁内等待后端返回。
+            backend.block_next_status = True
+            auto = asyncio.create_task(manager.set_mode("AUTO"))
+            await asyncio.wait_for(backend.status_entered.wait(), timeout=1)
+            assert manager._control.locked()
+
+            control = StreamControl()
+            backend.stream_release = asyncio.Event()
+            _, worker = await manager.open_chat_stream(MODEL, MESSAGES, 5500, control=control)
+            await asyncio.wait_for(backend.stream_started.wait(), timeout=1)
+            control.cancel()
+            backend.stream_release.set()
+            with pytest.raises(ApplicationError) as caught:
+                await worker
+            assert caught.value.code == "CHAT_CANCELLED"
+            # 锁被 AUTO 查询持有；卸载责任必须已登记，且不能提前宣称释放。
+            assert manager._control.locked()
+            assert manager.fault == "CANCELLED_AWAITING_UNLOAD"
+            assert manager.unload_verified is False
+            assert backend.models
+            assert (await manager.status())["pending_unloads"] == 1
+
+            backend.status_gate.set()
+            await auto
+            await wait_until(lambda: manager.unload_verified and not manager._reclaims)
+            final = await manager.status()
+            assert final["backend"]["models"] == []
+            assert final["fault"] is None
+            assert final["pending_unloads"] == 0
+            assert final["mode"] == "AUTO"
+            assert final["manual_gaming"] is False
+            assert backend.unload_calls == 1
+        finally:
+            backend.status_gate.set()
+            backend.stream_release.set()
+            for task in (auto, worker):
+                if task is not None:
+                    await asyncio.gather(task, return_exceptions=True)
+            await manager.close()
+
+    asyncio.run(scenario())
+
+
 def test_training_claim_state_write_failure_does_not_leak_unreleasable_lease(tmp_path):
     async def scenario():
         backend = FakeBackend()
@@ -606,6 +664,16 @@ def test_training_claim_state_write_failure_does_not_leak_unreleasable_lease(tmp
             # 未交付给训练程序的预留必须撤销，否则调用方没有办法释放它。
             assert manager.training_lease is None
             assert blocker.read_text(encoding="utf-8") == "preserve"
+
+            # 存储恢复后按“显式卸载复核 → AUTO → 重新申请”流程继续，无需重启。
+            manager.state_path = tmp_path / "gpu-mode.json"
+            recovered = await manager.unload()
+            assert recovered["unload_verified"] is True
+            assert manager.fault is None
+            assert (await manager.set_mode("AUTO"))["mode"] == "AUTO"
+            leased = await manager.claim_training(str(uuid4()), 4096)
+            assert leased["training"]["state"] == "reserved"
+            await manager.release_training(leased["training"]["lease"]["id"], stopped=True)
         finally:
             await manager.close()
 
@@ -671,10 +739,10 @@ def test_restart_uncertain_state_and_training_lease_require_explicit_recovery(tm
 
 
 def test_drain_timeout_stays_locked_and_never_reloads(tmp_path):
-    """BUG-DSB-01 的安全不变量：即使修复改变实现，门禁也不能自动打开或重载。
+    """BUG-DSB-01 的安全不变量：补偿卸载完成也不能自动打开门禁或重载。
 
-    具体“结束后是否重试卸载”留给 strict xfail；这个非 xfail 用例防止缺陷恶化成
-    自动退出 GAMING、自动唤醒模型或丢失故障诊断。
+    补偿任务只负责复用原卸载流程并复核 /api/ps；手动/检测 GAMING 来源和显式
+    AUTO 退出仍由用户控制。
     """
 
     async def scenario():
