@@ -8,7 +8,7 @@ from fastapi import FastAPI
 
 from nova.api.middleware import RequestContextMiddleware
 from nova.api.router import register_routes
-from nova.chat.registry import experimental_policy
+from nova.chat.registry import experimental_policy, stable_policies
 from nova.chat.service import ChatService, idle_monitor
 from nova.config import Settings, load_settings
 from nova.errors import register_exception_handlers
@@ -37,7 +37,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             drain_timeout=settings.gpu_drain_timeout,
             detection_enabled=settings.gpu_game_detection_enabled or settings.gpu_auto_game_enabled,
             pressure_enabled=settings.gpu_memory_pressure_enabled,
-            model_policies={experimental["model"]: experimental},
+            model_policies={**stable_policies(), experimental["model"]: experimental},
             # 与注册表共享同一模板，wake/generate/chat 都受实验开关、RAM和显存门禁。
             experimental_policy=experimental,
         )

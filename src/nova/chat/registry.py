@@ -20,6 +20,22 @@ def _qwen38_alias(name):
     return is_qwen38_alias(name)
 
 
+def stable_policies():
+    """稳定本地模型也有固定显存需求；统一由GPU管理器校验，而不是跳过。"""
+    return {
+        name: {
+            "model": name,
+            "enabled": True,
+            "required_mib": entry["required_mib"],
+            "min_total_ram_mib": 0,
+            "min_available_ram_mib": 0,
+            "runtime": {},
+        }
+        for name, entry in MODELS.items()
+        if entry["provider"] == "ollama"
+    }
+
+
 def experimental_policy(settings):
     runtime = {
         "num_ctx": settings.qwen38_context,
@@ -91,12 +107,16 @@ class ModelRegistry:
         return {"installed": sorted(installed), "reachable": reachable}
 
     def local_policies(self):
-        """实际别名全部复制同一RAM/启用/运行参数策略，供唯一GPU管理器装配。"""
+        """实际27B别名复制同一RAM/启用/运行参数策略。"""
         return {
             model: {**self.policy, "model": model, "runtime": dict(self.policy["runtime"])}
             for model, entry in self.entries.items()
             if entry.get("experimental")
         }
+
+    def gpu_policies(self):
+        """稳定模型和实际27B别名共用一份策略，供唯一GPU管理器装配。"""
+        return {**stable_policies(), **self.local_policies()}
 
     def _installed_experiments(self):
         return sorted(
