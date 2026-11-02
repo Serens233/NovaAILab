@@ -7,6 +7,7 @@ import threading
 
 import pytest
 
+from nova.chat.registry import stable_policies
 from nova.errors import ApplicationError
 from nova.gpu.backend import BackendError, OllamaBackend
 from nova.gpu.manager import GpuManager
@@ -74,7 +75,13 @@ class ChatBackend:
 
 
 def new_manager(tmp_path, backend):
-    return GpuManager(backend, tmp_path / "gpu-mode.json", drain_timeout=1, unload_timeout=0.1)
+    return GpuManager(
+        backend,
+        tmp_path / "gpu-mode.json",
+        drain_timeout=1,
+        unload_timeout=0.1,
+        model_policies=stable_policies(),
+    )
 
 
 def queued(queue):

@@ -10,6 +10,19 @@ from nova.gpu.backend import BackendError
 from nova.gpu.manager import GpuManager
 
 
+def practice_policy():
+    return {
+        "practice:tiny": {
+            "model": "practice:tiny",
+            "enabled": True,
+            "required_mib": 1,
+            "min_total_ram_mib": 0,
+            "min_available_ram_mib": 0,
+            "runtime": {},
+        }
+    }
+
+
 class FakeBackend:
     model = "practice:tiny"
 
@@ -31,7 +44,7 @@ class FakeBackend:
         return [dict(model) for model in self.models]
 
     async def get_gpu_memory_usage(self):
-        return {"available": True, "gpus": [{"total_mib": 100, "used_mib": 10}]}
+        return {"available": True, "gpus": [{"index": 0, "total_mib": 16311, "used_mib": 1000}]}
 
     async def unload_model(self, name):
         self.calls.append(("unload", name))
@@ -61,6 +74,7 @@ class FakeBackend:
 
 
 def manager_for(tmp_path, backend=None, **kwargs):
+    kwargs.setdefault("model_policies", practice_policy())
     return GpuManager(
         backend or FakeBackend(), tmp_path / "gpu-mode.json", unload_timeout=0.1, **kwargs
     )

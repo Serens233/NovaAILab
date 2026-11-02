@@ -105,6 +105,19 @@ def test_clear_hysteresis_reserves_room_for_model_reload():
     assert not policy.evaluate(clear)["active"]
 
 
+def practice_policy():
+    return {
+        "practice:tiny": {
+            "model": "practice:tiny",
+            "enabled": True,
+            "required_mib": 1,
+            "min_total_ram_mib": 0,
+            "min_available_ram_mib": 0,
+            "runtime": {},
+        }
+    }
+
+
 class Backend:
     model = "practice:tiny"
 
@@ -118,7 +131,7 @@ class Backend:
         return copy.deepcopy(self.models)
 
     async def get_gpu_memory_usage(self):
-        return {"available": True, "gpus": []}
+        return {"available": True, "gpus": [{"index": 0, "total_mib": 16311, "used_mib": 1000}]}
 
     async def unload_model(self, name):
         self.models = []
@@ -139,7 +152,9 @@ def test_pressure_defers_unload_until_inference_idle_and_records_reason(tmp_path
     async def run():
         backend = Backend()
         backend.release = asyncio.Event()
-        manager = GpuManager(backend, tmp_path / "gpu.json", pressure_enabled=True)
+        manager = GpuManager(
+            backend, tmp_path / "gpu.json", pressure_enabled=True, model_policies=practice_policy()
+        )
         await manager.start()
         work = asyncio.create_task(manager.generate("synthetic"))
         try:
@@ -169,11 +184,13 @@ def test_pressure_release_never_clears_manual_game_mode_and_state_survives(tmp_p
     async def run():
         backend = Backend()
         path = tmp_path / "gpu.json"
-        manager = GpuManager(backend, path, pressure_enabled=True)
+        manager = GpuManager(backend, path, pressure_enabled=True, model_policies=practice_policy())
         await manager.start()
         await manager.set_memory_pressure(True, {"active": True}, unload_idle=True)
         await manager.close()
-        restored = GpuManager(backend, path, pressure_enabled=True)
+        restored = GpuManager(
+            backend, path, pressure_enabled=True, model_policies=practice_policy()
+        )
         await restored.start()
         try:
             assert restored.memory_pressure_hold and restored.blocked
@@ -194,7 +211,9 @@ def test_pressure_monitor_works_without_game_detection(tmp_path):
                 return sample()
 
         backend = Backend()
-        manager = GpuManager(backend, tmp_path / "gpu.json", pressure_enabled=True)
+        manager = GpuManager(
+            backend, tmp_path / "gpu.json", pressure_enabled=True, model_policies=practice_policy()
+        )
         await manager.start()
         guard = MemoryPressureGuard(manager, Source(), policy=MemoryPressurePolicy(own_pid=99))
         try:

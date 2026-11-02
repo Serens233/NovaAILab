@@ -247,9 +247,9 @@ class GpuManager:
         self.model_policies.update(policies)
 
     async def _model_policy(self, model):
-        """所有加载入口共享同一实验策略；未匹配的27B标签必须失败关闭。"""
-        if not isinstance(model, str):
-            return None
+        """所有加载入口必须具有显式资源策略，安装或命名本身不构成准入。"""
+        if not isinstance(model, str) or not model.strip():
+            raise ApplicationError("MODEL_POLICY_INVALID", "模型标识未匹配受控资源策略", 503)
         folded = model.casefold()
         matches = [
             policy
@@ -273,7 +273,9 @@ class GpuManager:
             elif looks_like_qwen38(model):
                 raise ApplicationError("MODEL_POLICY_INVALID", "27B实验模型标识未匹配受控策略", 503)
             else:
-                return None
+                raise ApplicationError(
+                    "MODEL_POLICY_INVALID", "模型尚未登记资源策略，暂不允许加载", 503
+                )
         else:
             policy = matches[0]
         # Ollama可能规范化大小写；冲突的重复策略不能靠精确键优先绕过限制。

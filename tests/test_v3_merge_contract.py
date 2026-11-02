@@ -105,6 +105,33 @@ def manager_for(tmp_path, backend, **kwargs):
     )
 
 
+@pytest.mark.parametrize("model", ["nova-27b:latest", "llama3.1:70b", "", None, 123])
+@pytest.mark.parametrize("entry", ["wake", "generate", "chat"])
+def test_unregistered_or_invalid_model_is_denied_before_backend(tmp_path, model, entry):
+    """安装列表或自定义名称不能替代显式资源策略，也不能触发任何预检I/O。"""
+
+    async def scenario():
+        backend = PolicyBackend()
+        backend.model = model
+        manager = manager_for(tmp_path, backend)
+        await manager.start()
+        try:
+            with pytest.raises(ApplicationError) as caught:
+                if entry == "wake":
+                    await manager.wake()
+                elif entry == "generate":
+                    await manager.generate("合成问题")
+                else:
+                    await manager.open_chat_stream(model, MESSAGES, 1)
+            assert (caught.value.code, caught.value.status_code) == ("MODEL_POLICY_INVALID", 503)
+            assert backend.calls == []
+            assert not manager._active
+        finally:
+            await manager.close()
+
+    asyncio.run(scenario())
+
+
 def test_wake_and_generate_share_27b_template_and_fail_before_backend(tmp_path, monkeypatch):
     monkeypatch.setattr("nova.gpu.resources.get_system_memory", low_ram)
 
@@ -269,12 +296,26 @@ class MissingBackend(PolicyBackend):
         raise ModelNotInstalledError("synthetic missing model")
 
 
+def missing_model_policy():
+    """明确登记合成小模型，保证此套件测的是安装缺失，而不是策略缺失。"""
+    return {
+        "missing:tiny": {
+            "model": "missing:tiny",
+            "enabled": True,
+            "required_mib": 1,
+            "min_total_ram_mib": 0,
+            "min_available_ram_mib": 0,
+            "runtime": {},
+        }
+    }
+
+
 def test_missing_model_contract_does_not_create_safety_fault(tmp_path, monkeypatch):
     monkeypatch.setattr("nova.gpu.resources.get_system_memory", enough_memory)
 
     async def scenario():
         backend = MissingBackend()
-        manager = manager_for(tmp_path, backend)
+        manager = manager_for(tmp_path, backend, model_policies=missing_model_policy())
         await manager.start()
         try:
             for operation in (manager.wake, lambda: manager.generate("合成问题")):
@@ -493,6 +534,7 @@ def test_app_missing_model_wake_uses_installed_contract(monkeypatch, tmp_path):
             database_path=tmp_path / "data" / "nova.sqlite3",
         )
     )
+    app.state.gpu_manager.update_model_policies(missing_model_policy())
     with TestClient(app) as client:
         response = client.post("/api/gpu/wake", headers=AUTH)
         assert response.status_code == 503
@@ -501,6 +543,30 @@ def test_app_missing_model_wake_uses_installed_contract(monkeypatch, tmp_path):
         assert status["fault"] is None
         assert status["mode"] == "AUTO"
         assert status["local_requests_blocked"] is False
+
+
+@pytest.mark.parametrize("model", ["nova-27b:latest", "llama3.1:70b"])
+def test_app_diagnostic_loader_rejects_unknown_policy(monkeypatch, tmp_path, model):
+    backend = PolicyBackend()
+    backend.model = model
+    monkeypatch.setattr("nova.main.OllamaBackend", lambda *args, **kwargs: backend)
+    app = create_app(
+        Settings(
+            _env_file=None,
+            environment="test",
+            gpu_enabled=True,
+            gpu_token=SecretStr(TOKEN),
+            gpu_model=model,
+            data_dir=tmp_path / "state",
+            database_path=tmp_path / "data" / "nova.sqlite3",
+        )
+    )
+    with TestClient(app) as client:
+        for path, body in (("/api/gpu/wake", None), ("/api/gpu/generate", {"prompt": "合成"})):
+            response = client.post(path, json=body, headers=AUTH)
+            assert response.status_code == 503
+            assert response.json()["error"]["code"] == "MODEL_POLICY_INVALID"
+            assert backend.calls == []
 
 
 def test_completed_replay_keeps_database_rows_unchanged(replay_app):

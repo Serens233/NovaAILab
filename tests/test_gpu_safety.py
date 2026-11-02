@@ -14,6 +14,19 @@ from nova.main import create_app
 from nova.storage.database import DatabaseError
 
 
+def practice_policy():
+    return {
+        "practice:tiny": {
+            "model": "practice:tiny",
+            "enabled": True,
+            "required_mib": 1,
+            "min_total_ram_mib": 0,
+            "min_available_ram_mib": 0,
+            "runtime": {},
+        }
+    }
+
+
 class FakeBackend:
     model = "practice:tiny"
 
@@ -24,7 +37,7 @@ class FakeBackend:
         return []
 
     async def get_gpu_memory_usage(self):
-        return {"available": True, "gpus": [{"total_mib": 100, "used_mib": 10}]}
+        return {"available": True, "gpus": [{"index": 0, "total_mib": 16311, "used_mib": 1000}]}
 
     async def generate(self, prompt):
         self.generated += 1
@@ -37,7 +50,7 @@ def test_audit_save_failure_locks_gpu_without_recording_prompt(tmp_path):
         audit_path = tmp_path / "gpu-events.jsonl"
         audit_path.mkdir()
         backend = FakeBackend()
-        manager = GpuManager(backend, tmp_path / "gpu-mode.json")
+        manager = GpuManager(backend, tmp_path / "gpu-mode.json", model_policies=practice_policy())
         await manager.start()
         try:
             with pytest.raises(ApplicationError) as caught:
@@ -71,7 +84,9 @@ def test_invalid_state_parent_locks_before_model_request(tmp_path, operation):
         parent_file = tmp_path / "blocked-parent"
         parent_file.write_text("preserve-original-content", encoding="utf-8")
         backend = FakeBackend()
-        manager = GpuManager(backend, parent_file / "gpu-mode.json")
+        manager = GpuManager(
+            backend, parent_file / "gpu-mode.json", model_policies=practice_policy()
+        )
         try:
             with pytest.raises(ApplicationError) as caught:
                 if operation == "gaming":
