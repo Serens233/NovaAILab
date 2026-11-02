@@ -2,7 +2,7 @@
 
 ## 2026-11-02：V3.0 Phase 1 合并阻断修复
 
-在 `integration/v3-phase1`（含 PR #1/#2/#3）上完成两个小修复分支：GPU 安全修复 `de7e61f` 和聊天重放/错误契约修复 `e708b30`。修复游戏排空超时后的补偿卸载、chat/wake/generate 共享 27B 策略、取消后的显式回收责任、训练预留首次写盘失败回滚、已完成请求的只读幂等重放，并统一缺失模型为 `MODEL_NOT_INSTALLED`。
+在 `integration/v3-phase1`（含 PR #1/#2/#3）上完成两个小修复分支：GPU 安全修复 `de7e61f`（Draft PR #5）和聊天重放/错误契约修复 `e708b30`（Draft PR #6，基于 #5）。修复游戏排空超时后的补偿卸载、chat/wake/generate 共享 27B 策略、取消后的显式回收责任、训练预留首次写盘失败回滚、已完成请求的只读幂等重放，并统一缺失模型为 `MODEL_NOT_INSTALLED`。PR 地址：https://github.com/Serens233/NovaAILab/pull/5 、 https://github.com/Serens233/NovaAILab/pull/6 。
 
 实际全量 `python -B -m pytest -ra` 为 788 passed、0 failed、0 skipped；两个已知缺陷 xfail 已移除。Ruff 静态与格式检查（107 文件）、工程自检五组、前端 Node 单元测试 25 项均通过。真实 GPU 17 项、真实取消 5 项、16GB 27B 拒绝检查通过；真实游戏进程切换未执行，保留待验收。证据、限制与命令见 [阶段验收](ACCEPTANCE.md)。
 

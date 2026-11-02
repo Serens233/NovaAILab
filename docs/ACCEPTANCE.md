@@ -2,7 +2,11 @@
 
 ## V3.0 Phase 1 合并阻断修复（2026-11-02，Asia/Shanghai）
 
-集成基线为 `integration/v3-phase1`（PR #1 `2124e45` + PR #2 `984b890` + PR #3 `4c8d71f`）。修复分支：`fix/v3-gpu-safety`（`de7e61f`，游戏排空补偿、取消回收、训练预留回滚）和 `fix/v3-chat-replay-contract`（`e708b30`，共享27B策略、只读重放、`MODEL_NOT_INSTALLED` 契约），后者基于前者。验收使用包含两分支的 `e708b30` 工作树。
+集成基线为 `integration/v3-phase1`（PR #1 `2124e45` + PR #2 `984b890` + PR #3 `4c8d71f`）。修复分支：`fix/v3-gpu-safety`（`de7e61f`，游戏排空补偿、取消回收、训练预留回滚）和 `fix/v3-chat-replay-contract`（`e708b30`，共享27B策略、只读重放、`MODEL_NOT_INSTALLED` 契约），后者基于前者。验收使用包含两分支的 `integration/v3-phase1-verified`（`0fee37b`）。
+
+- Draft PR #5 GPU 安全：https://github.com/Serens233/NovaAILab/pull/5
+- Draft PR #6 聊天重放与错误契约（基于 #5）：https://github.com/Serens233/NovaAILab/pull/6
+- 两个 PR 均保持 Draft，不自动合并 main；#5 合并后需把 #6 base 改为 `integration/v3-phase1`。
 
 | 实际命令/检查 | 结果 |
 | --- | --- |
