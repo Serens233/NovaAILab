@@ -22,8 +22,8 @@
       "model": "qwen3.5:9b",
       "http_ttft_seconds": 46.461877,
       "request_seconds": 47.603509,
-      "load_duration_ns": 28187756100,
-      "tokens_per_second": 10.52528172670755
+      "load_duration_ns": 25378055100,
+      "tokens_per_second": 5.938518517785368
     }
   ],
   "idle_seconds": 182.722347,
