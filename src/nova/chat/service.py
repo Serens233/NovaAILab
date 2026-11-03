@@ -111,6 +111,26 @@ class ChatService:
         self.manager.update_model_policies(self.registry.gpu_policies())
         return entry
 
+    def _compose(self, entry, thread_id, history, content, record):
+        runtime = entry.get("policy", {}).get("runtime", {})
+        prepared = self.orchestrator.build(
+            thread_id,
+            history,
+            content,
+            context_tokens=runtime.get("num_ctx", 4096),
+            output_tokens=runtime.get("num_predict", 512),
+        )
+        record["context_metrics"] = {
+            "model": entry["id"],
+            "versions": prepared.versions,
+            "estimated_prompt_tokens": prepared.estimated_prompt_tokens,
+            "estimation_method": prepared.estimation_method,
+            "dropped_messages": prepared.dropped_messages,
+            "context_tokens": prepared.context_tokens,
+            "reserved_output_tokens": prepared.reserved_output_tokens,
+        }
+        return prepared.messages
+
     async def _prepare(self, thread_id, model, content, request_id, cloud_consent, think, record):
         # 先只读校验请求身份并查找已完成结果：命中时不得查询Ollama、检查资源或启动生成。
         replay = await asyncio.to_thread(
@@ -140,23 +160,7 @@ class ChatService:
             self.registry.require_cloud(cloud_consent)
         await asyncio.to_thread(self.store.get_thread, thread_id)
         history = await asyncio.to_thread(self.store.get_messages, thread_id)
-        runtime = entry.get("policy", {}).get("runtime", {})
-        prepared = self.orchestrator.build(
-            thread_id,
-            history,
-            content,
-            context_tokens=runtime.get("num_ctx", 4096),
-            output_tokens=runtime.get("num_predict", 512),
-        )
-        record["context_metrics"] = {
-            "model": entry["id"],
-            "versions": prepared.versions,
-            "estimated_prompt_tokens": prepared.estimated_prompt_tokens,
-            "estimation_method": prepared.estimation_method,
-            "dropped_messages": prepared.dropped_messages,
-            "context_tokens": prepared.context_tokens,
-            "reserved_output_tokens": prepared.reserved_output_tokens,
-        }
+        messages = self._compose(entry, thread_id, history, content, record)
         run = await asyncio.to_thread(self.store.begin_run, thread_id, model, content, request_id)
         meta = {
             "type": "meta",
@@ -179,7 +183,6 @@ class ChatService:
             output.put_nowait({"type": "error", "code": "CHAT_CANCELLED", "message": "生成已取消"})
             return output
 
-        messages = prepared.messages
         try:
             if entry["provider"] == "ollama":
                 kwargs = {"control": record["control"]}
@@ -201,6 +204,7 @@ class ChatService:
                     self.manager._admit()
                     entry = await self._resolve(fallback)
                     meta.update(model=entry["id"], fallback_reason=error.code)
+                    messages = self._compose(entry, thread_id, history, content, record)
                     upstream, worker = await self.manager.open_chat_stream(
                         entry["id"], messages, entry["required_mib"], **kwargs
                     )
