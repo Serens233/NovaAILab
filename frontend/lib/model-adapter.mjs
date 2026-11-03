@@ -2,7 +2,7 @@ import { readNovaEvents } from "./stream.mjs";
 
 /**
  * settingsRef 由 NovaRuntime 持有；远程线程宿主即使保留首次 hook，也读取同一个 ref。
- * @param {{current:{model:string,cloudConsent:boolean,onError:(message:string|null)=>void}}} settingsRef
+ * @param {{current:{model:string,confirmCloud:()=>boolean,onError:(message:string|null)=>void}}} settingsRef
  * @param {{initialize:()=>Promise<{remoteId:string}>,send:(body:{thread_id:string,model:string,content:string,request_id:string,cloud_consent:boolean},signal:AbortSignal)=>Promise<Response>,cancel:(body:{thread_id:string,request_id:string})=>Promise<unknown>,reload:()=>void|Promise<void>}} transport
  * @returns {import("@assistant-ui/react").ChatModelAdapter}
  */
@@ -23,6 +23,9 @@ export function createNovaModelAdapter(settingsRef, transport) {
             };
             try {
                 checkAbort();
+                const cloudConsent = selection.model === "deepseek" && selection.confirmCloud();
+                if (selection.model === "deepseek" && !cloudConsent)
+                    throw new Error("本次云端发送未获同意。");
                 const { remoteId } = await transport.initialize();
                 checkAbort();
                 const body = {
@@ -33,7 +36,7 @@ export function createNovaModelAdapter(settingsRef, transport) {
                         .map((part) => part.text)
                         .join("\n"),
                     request_id: crypto.randomUUID(),
-                    cloud_consent: selection.cloudConsent,
+                    cloud_consent: cloudConsent,
                 };
                 onAbort = () => {
                     if (!sent || completed || cancelRequested) return;

@@ -6,7 +6,6 @@ import json
 import logging
 import math
 import os
-import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,10 +31,33 @@ class InstanceLease:
 
     def __init__(self, identity):
         name = hashlib.sha256(identity.encode()).hexdigest()[:24]
-        self.path = Path(tempfile.gettempdir()) / f"nova-gpu-{name}.lock"
+        self.name = f"nova-gpu-{name}"
+        self.path = Path.home() / ".nova" / "locks" / f"{self.name}.lock"
         self.file = None
+        self.handle = None
 
     def acquire(self):
+        if os.name == "nt":
+            # 命名互斥量不受 TEMP/TMP 影响，进程意外退出时由 OS 释放。
+            import ctypes
+            from ctypes import wintypes
+
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel.CreateMutexW.argtypes = (ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR)
+            kernel.CreateMutexW.restype = wintypes.HANDLE
+            kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+            kernel.CloseHandle.restype = wintypes.BOOL
+            # 以命名对象的存续期表示租约，不取得线程所有权：关闭句柄可跨线程执行。
+            ctypes.set_last_error(0)
+            handle = kernel.CreateMutexW(None, False, "Global\\" + self.name)
+            if not handle:
+                raise RuntimeError("无法创建 GPU 调度实例锁") from None
+            if ctypes.get_last_error() == 183:
+                kernel.CloseHandle(handle)
+                raise RuntimeError("该 Ollama 服务已有 GPU 调度实例；请使用单 worker")
+            self.handle = handle
+            return
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         self.file = self.path.open("a+b")
         self.file.seek(0, 2)
         if self.file.tell() == 0:
@@ -43,20 +65,24 @@ class InstanceLease:
             self.file.flush()
         self.file.seek(0)
         try:
-            if os.name == "nt":
-                import msvcrt
+            import fcntl
 
-                msvcrt.locking(self.file.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(self.file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(self.file, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
             self.file.close()
             self.file = None
             raise RuntimeError("该 Ollama 服务已有 GPU 调度实例；请使用单 worker") from None
 
     def release(self):
+        if self.handle is not None:
+            import ctypes
+            from ctypes import wintypes
+
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+            kernel.CloseHandle.restype = wintypes.BOOL
+            kernel.CloseHandle(self.handle)
+            self.handle = None
         if self.file:
             self.file.close()
             self.file = None
@@ -931,6 +957,26 @@ class GpuManager:
             ) from None
         if type(required_mib) is not int or not 1 <= required_mib <= 65536:
             raise ApplicationError("TRAINING_MEMORY_INVALID", "训练显存需求无效", 422)
+        existing = self.training_lease
+        if existing and existing["job_id"] == job_id:
+            if existing["required_mib"] != required_mib:
+                raise ApplicationError(
+                    "TRAINING_JOB_CONFLICT", "训练任务显存需求与已有租约不一致", 409
+                )
+            if existing["state"] == "preparing":
+                raise ApplicationError("TRAINING_PREPARING", "资源预留尚未完成，请稍后重试", 409)
+            if existing["state"] != "reserved":
+                raise ApplicationError(
+                    "TRAINING_STATE_UNKNOWN", "重启后的训练状态未知，请先人工确认", 409
+                )
+            self._admit(training_lease_id=existing["id"])
+            result = await self.status()
+            self._admit(training_lease_id=existing["id"])
+            if self.training_lease is not existing:
+                raise ApplicationError(
+                    "TRAINING_LEASE_MISMATCH", "训练租约已发生变化，请重新申请", 409
+                )
+            return result
         self._admit()
         lease_id = str(uuid4())
         self.training_lease = {

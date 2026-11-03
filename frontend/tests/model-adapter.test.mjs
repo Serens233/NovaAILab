@@ -10,7 +10,9 @@ const response = () =>
     new Response(
         'data: {"type":"delta","text":"你"}\n\ndata: {"type":"delta","text":"好"}\n\ndata: {"type":"done","message":{"content":"你好"}}\n\n',
     );
-const settings = () => ({ current: { model: "qwen3.5:9b", cloudConsent: false, onError() {} } });
+const settings = () => ({
+    current: { model: "qwen3.5:9b", confirmCloud: () => false, onError() {} },
+});
 async function run(adapter, args = options()) {
     const result = [];
     for await (const item of adapter.run(args)) result.push(item);
@@ -108,7 +110,40 @@ test("本地请求失败不会自动改用收费云端", async () => {
     await assert.rejects(run(adapter), /游戏模式/);
     assert.equal(count, 1);
     assert.equal(error, "游戏模式阻止请求");
-    assert.equal(ref.current.cloudConsent, false);
+    assert.equal(ref.current.confirmCloud(), false);
+});
+
+test("云端每次发送都要单独确认，拒绝时不创建会话或发送", async () => {
+    const ref = settings();
+    ref.current.model = "deepseek";
+    let confirmations = 0;
+    let initialized = 0;
+    const sent = [];
+    ref.current.confirmCloud = () => ++confirmations <= 2;
+    const adapter = createNovaModelAdapter(ref, {
+        async initialize() {
+            initialized++;
+            return { remoteId: `thread-${initialized}` };
+        },
+        async send(body) {
+            sent.push(body);
+            return response();
+        },
+        reload() {},
+    });
+    await run(adapter);
+    await run(adapter);
+    await assert.rejects(run(adapter), /未获同意/);
+    assert.equal(confirmations, 3);
+    assert.equal(initialized, 2);
+    assert.deepEqual(
+        sent.map((body) => body.cloud_consent),
+        [true, true],
+    );
+    assert.deepEqual(
+        sent.map((body) => body.thread_id),
+        ["thread-1", "thread-2"],
+    );
 });
 
 test("开始前已停止，不创建会话、不发送聊天或取消请求", async () => {
