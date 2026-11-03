@@ -6,6 +6,10 @@
 
 独立分支修复 Windows 实例锁、训练预留重试、聊天历史并发与落库失败恢复，以及旧前端逐次云端确认；无新依赖和 schema 变更。`.venv\Scripts\python.exe -B -m pytest -p no:cacheprovider -q --basetemp E:\NovaAILab\logs\review-fixes-full-20261104`：1005 passed；Ruff check、126 文件 format check、工程自检 5 项通过。`frontend` 的 `npm run test` 26 项通过，typecheck、lint、build 成功；Next 生产网关对替身上游的 34 项检查通过。游戏、27B、真实付费云端和手机浏览器未在本轮执行，角色质量仍待修复及独立验收。设计与升级限制见 [D021](docs/decisions.md)。
 
+整合 UI 分支后，隔离数据目录启动实际 UI-01 网关及 FastAPI：页面 HTTP 200、健康接口 `database=ok`、正常退出。启用自动检测与压力保护执行 `harness/verify_automatic_live.py`，真实本机 Ollama 4B/GPU 验收 17 项通过，包含手动 GAMING 卸载与拒绝请求、重启保持、恢复 AUTO 按需加载和最终卸载；结束时 `/api/ps` 无模型。该测试未启动真实游戏，不能代替自动游戏检测实测。
+
+第一次 `harness/verify_v2_live.py` 真实聊天测试在空闲期遇到短暂 `local_requests_blocked=true` 后退出；此前 9B/4B 流式聊天及手动游戏门禁检查通过，最终卸载且服务正常退出。紧接着日志出现卸载完成记录，状态接口不提供阻断原因，不能断言二者的因果关系。验收脚本已改为仅在确认 AUTO、无游戏/压力/故障/训练且只观察空闲状态时等待短暂阻断解除；任何真实保护状态仍终止，阻断样本不能算成功。24 项保护边界测试通过。首次失败原始证据保存在仓库外 `E:\NovaAILab\logs\review-fixes-chat-live-20261104`。
+
 ## Phase 2 角色答复复验（2026-11-04）
 
 按负责人要求修正虚称操作及时间精度。首轮提示过长，测试 987 通过、2 失败；压缩后两轮各对 9B/4B 运行原固定题集，最终完整后端回归 989 通过。9B 日程案例改善，4B 仍擅补周次并出现临时标记误拒。此项未通过角色质量验收，详见 [候选报告](docs/PHASE2_ACCEPTANCE.md)。
