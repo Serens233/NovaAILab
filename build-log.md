@@ -2,6 +2,14 @@
 
 日期按 Asia/Shanghai 记录。只写实际执行结果，不用计划替代命令。Phase 0 历史见 [进度记录](docs/progress.md)。
 
+## Phase 2 人格与对话编排候选（2026-11-02 至 2026-11-03）
+
+从独立 Phase 1 验收基线 `4fad26f` 建立功能分支。先提交审计与冻结题集，再依次提交三层人格、对话接入、评估工具和备用模型预算修复。输入及模型输出仅作为低信任数据，Canon 和批准 Persona 经 Git 审查的固定 bundle 生效。编排沿用 ChatService 和 GPU Manager，依赖锁和 OpenAPI 相等。
+
+后端最终回归 989 项通过，前端 25 项、Next HTTP 34 项、类型检查、格式检查、构建与 wheel 人格数据导入通过。真实 9B/4B 合成评测共 24 题、38 次生成。冷启动与热启动各模型前后各测 1 次，记录为样本结果。辅助评分保留主观维度与不适用项，人工评分仍待负责人填写。完整证据与已知问题见 [Phase 2 候选报告](docs/PHASE2_ACCEPTANCE.md)。
+
+真实 Ollama 最终回归 29 项通过。GAMING 卸载及拒绝新请求、AUTO 按需加载、180.42 秒空闲卸载、重启历史和幂等重放均有本机证据。SQLite 完整性检查通过，两次后端退出 0，最终模型列表为空。
+
 ## Codex 复审修复（2026-11-02）
 
 用户明确授权修复并在测试通过后合并 #5/#6。使用独立 `nova-codex-reclaim-fix`、`nova-codex-policy-fix` worktree；P1 线程回归先在旧实现失败，再提交 `9d10341` 修复；P2 未知策略 15 项先全红，补拒绝与 API 回归并提交 `c4e3df6`。合并两提交后实际运行 809 passed、0 failed、0 skipped（15.84秒），没有 xfail/skip 隐藏问题。

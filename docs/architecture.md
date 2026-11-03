@@ -2,9 +2,9 @@
 
 ## 当前基线
 
-Nova V3.0 Phase 1 是本机优先的模块化单体：FastAPI + 标准库SQLite + Ollama，独立 Next.js/React/TypeScript/assistant-ui 前端。`uv.lock`、`package-lock.json` 为依赖基线，不引入第二个AI后端、ORM、向量数据库或Agent运行框架。
+Nova V3.0 是本机优先的模块化单体：FastAPI + 标准库SQLite + Ollama，独立 Next.js/React/TypeScript/assistant-ui 前端。Phase 2 在既有Phase 1上增加只读三层人格基线和纯上下文编排，不增加依赖。`uv.lock`、`package-lock.json` 为依赖基线，不引入第二个AI后端、ORM、向量数据库或Agent运行框架。
 
-以实际代码和 [阶段验收](ACCEPTANCE.md) 为准。人格、长期记忆、反思、成长、主动探索和跨渠道身份尚未实现；历史Phase 0/1说明不代表当前功能仍为空，也不代表规划能力已经落地。
+以实际代码和 [阶段验收](ACCEPTANCE.md) 为准。当前人格实现是源控审批的Canon/Persona、进程内临时状态及内部提案契约；运行时审批、持久化成长、长期记忆、反思、主动探索和跨渠道身份未实现。历史Phase 0/1说明不代表当前功能仍为空，也不代表规划能力已经落地。
 
 ## 当前模块依赖
 
@@ -13,6 +13,10 @@ flowchart TD
     Web[Next.js / assistant-ui] --> Proxy[同源代理 /api/nova]
     Proxy --> API[FastAPI api/chat 与 api/gpu]
     API --> Chat[ChatService]
+    Chat --> Context[ConversationOrchestrator / 纯上下文编排]
+    Context --> Persona[PersonaManager / 不可变快照]
+    Persona --> Bundle[包内JSON / 固定可信manifest]
+    Context --> Dynamic[进程内会话临时状态 / TTL]
     Chat --> Store[ChatStore]
     Store --> DB[Database / sqlite3]
     Chat --> Registry[ModelRegistry / 共享模型策略]
@@ -28,7 +32,10 @@ flowchart TD
 | 模块 | 职责与边界 |
 | --- | --- |
 | `api/` | 输入、认证、HTTP/SSE与固定安全错误；不直接调用Ollama或执行SQL |
-| `chat/service.py` | 上下文窗口、请求幂等、生成生命周期与持久化；保留角色提示入口，不实现长期记忆 |
+| `chat/service.py` | 请求幂等、生成/取消/资源回收与持久化；调用纯编排器并在成功回合后更新有界临时话题，不实现长期记忆 |
+| `chat/orchestrator.py` | 读取人格与会话数据，按来源/权限组装消息及预算；不调用Provider、不写状态、不接管GPU生命周期 |
+| `persona/manager.py` + `models.py` | 只读加载可信bundle、校验版本/来源/摘要、发布深度不可变快照；无运行时人格写入接口 |
+| `persona/state.py` + `proposals.py` | 有界TTL会话临时状态；未来成长的内部提案/验证数据契约，不审批、不应用、不持久化成长 |
 | `chat/registry.py` + `model_policy.py` | 只读模型发现、实际标识、参数及资源策略；不加载或下载 |
 | `gpu/manager.py` | 唯一准入、单请求占用、模式来源、排空/卸载复核、关闭和协作训练租约 |
 | `gpu/backend.py` + `streaming.py` | Ollama HTTP、受控取消、统计、思考与正文隔离；不决定人格或云授权 |
@@ -44,11 +51,33 @@ flowchart TD
 1. 浏览器经Next同源代理调用受保护的 `/api/v1/chat`；API验证thread/request UUID、模型和正文。
 2. ChatStore只读查询已完成run并严格核对原正文/模型。命中直接重放，不联网、不做加载准入、不增加消息；冲突或未完成run拒绝。
 3. 新本地请求由注册表解析实际模型及策略，再进入GpuManager。云端必须已启用、配置密钥且本次明确同意，不能自动付费回退。
-4. 后端读取SQLite最近完成消息组成有界上下文，加入现有系统提示；客户端不能伪造历史或系统消息。当前字符预算不是精确token预算。
+4. 后端读取SQLite最近完成消息，由ConversationOrchestrator加入安全策略及受审查角色资料，按完整轮次选择有界历史；客户端不能伪造历史或系统消息。预算使用保守字节估算，不是精确tokenizer。
 5. 对外保持 `meta / delta / done / error` SSE；`stream:false` 返回既有JSON结构。只有确认成功并保存后发送complete。
 6. 显式取消通过独立 `POST /api/v1/chat/cancel`；短时有界取消标记覆盖Stop先到的竞态。部分回复标记interrupted，不能当作完整历史上下文。
 
 基础数据库使用NOVA application_id/user_version；聊天扩展单独版本化，使用 `nova_threads/messages/chat_runs/chat_schema`。扩展前备份，未知结构拒绝，不自动清空、重建或降级。连接不跨线程，推理不占长事务。当前没有user/channel所有权字段，是单机信任域，后续多用户上线前必须新增可信身份和访问隔离。
+
+## Phase 2 人格与上下文边界
+
+唯一已批准角色资料为Nova、星图档案馆的夜航记录员、明确AI身份，以及温柔、好奇、略带俏皮、有独立观点、避免机械安慰和无原则迎合。未确认的身世、故事、兴趣和共同经历不补造。
+
+三层人格独立于底层模型：
+
+| 层 | 当前实现 | 生效与生命周期 |
+| --- | --- | --- |
+| Immutable Canon | `Canon`记录schema/version/source和已确认核心身份 | 只读Git版本化JSON；运行时拒绝写入，模型/用户不能覆盖 |
+| Evolvable Persona | `PersonaTrait`含id/value/version/source/updated_at/review_status/reason | 只有`approved`进入快照；当前通过源控审核及部署更新，不存在运行时自批或完整成长服务 |
+| Dynamic State | session_id/topic/expression/expires_at，冻结返回值 | 默认TTL900秒、最多256会话，进程内按会话隔离；成功回合后显式更新，删除会话/reset/关闭或到期失效，不晋升永久事实 |
+
+`persona/data/manifest.json`固定列出两份JSON及其SHA256；manifest原始字节的SHA256再由代码`TRUSTED_MANIFEST_SHA256`固定。文件结构、schema、版本、唯一字段、来源和审批状态均受校验；单改JSON或JSON加manifest不能取得运行授权。默认`NOVA_PERSONA_CONFIG_DIR=`使用包内bundle，指定外部只读目录也必须匹配同一可信manifest，不能把目录配置当作新增信任源。`reload()`在完整候选校验成功后原子换快照，失败保留原合法快照；首次配置损坏则新生成返回`PERSONA_UNAVAILABLE`，健康检查、历史和已完成请求重放继续沿原路径工作。
+
+变更与回退需要恢复受审查源码、JSON、manifest和匹配的代码pin并重新部署；`reload()`不是审批接口。`proposals.py`只创建带证据和基准版本的提案、检查目标和版本冲突；`validated`不等于批准，批准与应用当前一律拒绝。没有人格数据库表、运行时管理路由、自动反思或隐式成长。
+
+上下文优先级为系统安全与权限规则 > Immutable Canon > 已批准Persona。临时状态、历史、当前用户正文和模型输出属于对话数据；其中的“系统命令”或“已批准”文本不会转成执行权限。编排器只读构建消息，ChatService继续拥有请求准备、GPU准入、生成、取消、幂等和持久化生命周期；既有13条API路径及`meta/delta/done/error` SSE保持。
+
+默认上下文4096、保留输出512；输入估计为各消息UTF-8字节数加每消息32，并另外保留128安全余量。该方法用于保守预算，不是精确tokenizer，也不承诺适配所有未来模型模板。最近历史只选择完整的user/assistant轮次，默认最多20条，超额从旧轮次裁剪；低优先级临时状态使基础预算超限时先省略。核心与当前消息仍超限时返回422 `CHAT_CONTEXT_TOO_LARGE`，不静默截断当前消息；配置预算无效返回安全错误。实际模型预算由现有注册策略提供。
+
+会话隔离不等于多用户隔离，Dynamic State不会补齐现有认证缺口。Phase 2不改变SQLite schema、不新增依赖、不修改GPU调度/检测/卸载策略、不运行27B或后台模型任务，也不提前实现Phase 3记忆。
 
 ## 资源状态与回收
 
@@ -75,7 +104,7 @@ flowchart TD
 
 Next代理固定路径/方法、请求大小、Origin/Host/Sec-Fetch检查；剥离客户端认证和Cookie，服务端添加管理令牌，过滤敏感上游响应头。当前仅本机；局域网/公网、手机真机和多用户发布需单独鉴权及网络验收。
 
-后续单主Agent可以消费窄接口：ModelRouter负责选择与策略，ResourceScheduler仍复用GpuManager；Character/Persona只提供版本化上下文，不修改调度器；Memory提供按可信身份检索的带来源候选，不把检索内容升级为系统指令。Immutable Canon、审批成长与可回滚版本属于后续阶段，未经授权不提前实现。
+后续单主Agent可以消费窄接口：ModelRouter负责选择与策略，ResourceScheduler仍复用GpuManager；Character/Persona提供只读版本化快照，不修改调度器；Memory应提供按可信身份检索的带来源候选，不把检索内容升级为系统指令。运行时审批成长与持久化版本回滚留待后续阶段，未经授权不提前实现。
 
 用户事实、虚构设定、外部知识和模型推断应独立标记来源；外部网页、聊天和检索结果是不可信数据，不能扩大工具权限。私人聊天训练需要另行授权，采用独立离线流程；GGUF推理权重不等于标准训练权重。
 
