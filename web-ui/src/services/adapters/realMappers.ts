@@ -84,6 +84,7 @@ export function mapConversation(raw: unknown): Conversation {
     channelType: toChannelType(pick(o, ['channel_type', 'channelType', 'channel', 'source'])),
     messageCount: Number(pick(o, ['message_count', 'messageCount'])) || undefined,
     preview: optStr(o, ['preview', 'last_message', 'lastMessage']),
+    model: optStr(o, ['model']),
   };
 }
 
@@ -108,6 +109,7 @@ export function mapMessage(raw: unknown, conversationId: string): NovaMessage {
     channelType: toChannelType(pick(o, ['channel_type', 'channelType', 'channel'])),
     externalMessageId: optStr(o, ['external_message_id', 'externalMessageId']),
     deliveryStatus: status === 'interrupted' ? 'stopped' : status,
+    model: optStr(o, ['model']),
   };
 }
 
@@ -296,6 +298,8 @@ export function mapStreamPayload(eventName: string, data: unknown): StreamEvent 
       conversationId: optStr(data, ['thread_id']),
       messageId: optStr(data, ['assistant_message_id']),
       userMessageId: optStr(data, ['user_message_id']),
+      model: optStr(data, ['model']),
+      fallbackReason: optStr(data, ['fallback_reason']),
     };
   }
   if (type === 'start') {

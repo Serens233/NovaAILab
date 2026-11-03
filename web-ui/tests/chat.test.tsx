@@ -7,7 +7,7 @@ import { queryKeys } from '@/hooks/queries';
 import { fakeFetch, fastMock, json, renderApp } from './utils';
 
 const input = () => screen.getByTestId('composer-input') as HTMLTextAreaElement;
-const realThread = { id: '11111111-1111-4111-8111-111111111111', title: '本地验收', created_at: '2026-11-03T12:00:00Z' };
+const realThread = { id: '11111111-1111-4111-8111-111111111111', title: '本地验收', model: 'qwen3.5:4b', created_at: '2026-11-03T12:00:00Z' };
 
 function renderRealChat(routes: Parameters<typeof fakeFetch>[0]) {
   const f = fakeFetch({
@@ -83,6 +83,17 @@ describe('中文输入法', () => {
 });
 
 describe('会话：创建与切换', () => {
+  it('历史记录显示请求模型与实际回复模型的差异', async () => {
+    renderRealChat({
+      ['GET /api/v1/threads/' + realThread.id]: () => json({ thread: realThread, messages: [
+        { id: 'u1', thread_id: realThread.id, role: 'user', content: '你好', model: 'qwen3.5:9b', created_at: realThread.created_at },
+        { id: 'a1', thread_id: realThread.id, role: 'assistant', content: '你好呀', model: 'qwen3.5:4b', status: 'complete', created_at: realThread.created_at },
+      ] }),
+    });
+    expect(await screen.findByText('模型：qwen3.5:4b')).toBeInTheDocument();
+    expect(screen.getByText('请求模型：qwen3.5:9b')).toBeInTheDocument();
+  });
+
   it('新建会话进入欢迎界面，切换到已有会话显示其消息', async () => {
     const user = userEvent.setup();
     const { router } = renderApp('/');
@@ -111,6 +122,18 @@ describe('会话：创建与切换', () => {
 });
 
 describe('错误与离线', () => {
+  it('本机无外网但健康检查通过时仍允许访问本地后端', async () => {
+    const original = Object.getOwnPropertyDescriptor(navigator, 'onLine');
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    try {
+      renderRealChat({});
+      await waitFor(() => expect(screen.getAllByTestId('connection-badge')[0]).toHaveAttribute('data-state', 'online'));
+      expect(input()).not.toBeDisabled();
+    } finally {
+      if (original) Object.defineProperty(navigator, 'onLine', original);
+      else Reflect.deleteProperty(navigator, 'onLine');
+    }
+  });
   it('真实模式后端 500 时展示实际错误，不降级为演示回复', async () => {
     const user = userEvent.setup();
     const { queryClient } = renderRealChat({
@@ -151,6 +174,74 @@ describe('错误与离线', () => {
 });
 
 describe('停止生成', () => {
+  it('真实模式切换会话时用当前请求 ID 通知后端取消', async () => {
+    const user = userEvent.setup();
+    const { router, calls, queryClient } = renderRealChat({
+      'POST /api/v1/chat': () => new Promise<Response>(() => {}),
+      'POST /api/v1/chat/cancel': () => json({ cancel_requested: true }),
+    });
+    await waitFor(() => expect(queryClient.getQueryData([...queryKeys.capabilities, true])).toBeDefined());
+    await user.type(input(), '测试切换{Enter}');
+    await waitFor(() => expect(calls.some((c) => c.url === '/api/v1/chat')).toBe(true));
+    await act(() => router.navigate('/'));
+    await waitFor(() => expect(calls.some((c) => c.url === '/api/v1/chat/cancel')).toBe(true));
+    const chat = calls.find((c) => c.url === '/api/v1/chat')!.body as { request_id: string };
+    const cancel = calls.find((c) => c.url === '/api/v1/chat/cancel')!.body;
+    expect(cancel).toEqual({ thread_id: realThread.id, request_id: chat.request_id });
+  });
+
+  it('传输失败后重试复用原请求 ID', async () => {
+    const user = userEvent.setup();
+    let attempts = 0;
+    const { calls, queryClient } = renderRealChat({
+      'POST /api/v1/chat': () => {
+        attempts += 1;
+        if (attempts === 1) throw new TypeError('连接中断');
+        return json({ error: { message: '原请求仍在处理' } }, 409);
+      },
+    });
+    await waitFor(() => expect(queryClient.getQueryData([...queryKeys.capabilities, true])).toBeDefined());
+    await user.type(input(), '测试重试{Enter}');
+    const err = await screen.findByTestId('turn-error');
+    expect(err).toHaveTextContent('重试会沿用原请求');
+    await user.click(within(err).getByRole('button', { name: /重新发送/ }));
+    await waitFor(() => expect(calls.filter((c) => c.url === '/api/v1/chat')).toHaveLength(2));
+    const requests = calls.filter((c) => c.url === '/api/v1/chat').map((c) => c.body as { request_id: string; model: string });
+    expect(requests[0].request_id).toBe(requests[1].request_id);
+    expect(requests[0].model).toBe(requests[1].model);
+  });
+
+  it('后端确认流已失败后重试使用新请求 ID', async () => {
+    const user = userEvent.setup();
+    const meta = { type: 'meta', thread_id: realThread.id, user_message_id: 'u1', assistant_message_id: 'a1', model: 'qwen3.5:4b' };
+    const body = [meta, { type: 'error', code: 'CHAT_FAILED', message: '推理失败' }]
+      .map((item) => `data: ${JSON.stringify(item)}\n\n`).join('');
+    const { calls, queryClient } = renderRealChat({
+      'POST /api/v1/chat': () => new Response(body, { headers: { 'Content-Type': 'text/event-stream' } }),
+    });
+    await waitFor(() => expect(queryClient.getQueryData([...queryKeys.capabilities, true])).toBeDefined());
+    await user.type(input(), '确认失败{Enter}');
+    const err = await screen.findByTestId('turn-error');
+    await user.click(within(err).getByRole('button', { name: /重新发送/ }));
+    await waitFor(() => expect(calls.filter((c) => c.url === '/api/v1/chat')).toHaveLength(2));
+    const requests = calls.filter((c) => c.url === '/api/v1/chat').map((c) => c.body as { request_id: string });
+    expect(requests[0].request_id).not.toBe(requests[1].request_id);
+  });
+
+  it('切换会话时后端取消失败会显示未确认提示', async () => {
+    const user = userEvent.setup();
+    const { router, calls, queryClient } = renderRealChat({
+      'POST /api/v1/chat': () => new Promise<Response>(() => {}),
+      'POST /api/v1/chat/cancel': () => json({ error: { message: '暂不可用' } }, 500),
+    });
+    await waitFor(() => expect(queryClient.getQueryData([...queryKeys.capabilities, true])).toBeDefined());
+    await user.type(input(), '测试取消失败{Enter}');
+    await waitFor(() => expect(calls.some((c) => c.url === '/api/v1/chat')).toBe(true));
+    await act(() => router.navigate('/'));
+    expect(await screen.findByText(/切换会话时未能确认停止生成/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '关闭' }));
+  });
+
   it('真实模式在收到首个 SSE 事件之前用原始请求 UUID 停止后端', async () => {
     const user = userEvent.setup();
     let completeChat: ((response: Response) => void) | undefined;

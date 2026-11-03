@@ -10,10 +10,12 @@ const CHANNEL_LABEL = { web: 'Web', qq: 'QQ', wechat: '微信' } as const;
 
 export const MessageBubble = memo(function MessageBubble({
   message,
+  requestedModel,
   footer,
   pending,
 }: {
   message: NovaMessage;
+  requestedModel?: string;
   footer?: ReactNode;
   pending?: boolean;
 }) {
@@ -40,6 +42,9 @@ export const MessageBubble = memo(function MessageBubble({
         <div className="mb-1 flex items-center gap-1.5 px-1 text-[0.7rem] text-muted-foreground">
           <span className="font-medium">{isUser ? '你' : 'Nova'}</span>
           <time dateTime={message.timestamp}>{formatMessageTime(message.timestamp)}</time>
+          {!isUser && message.model && <span>模型：{message.model}</span>}
+          {!isUser && requestedModel && message.model && requestedModel !== message.model && <span>请求模型：{requestedModel}</span>}
+          {!isUser && message.fallbackReason && <span>已回退（{message.fallbackReason}）</span>}
           {message.channelType && message.channelType !== 'web' && (
             <Badge tone="star" className="py-0">
               来自 {CHANNEL_LABEL[message.channelType]}

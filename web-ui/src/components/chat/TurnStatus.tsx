@@ -33,6 +33,8 @@ export function PendingAssistant({ turn }: { turn: ActiveTurn }) {
         <p className="mt-1 px-1 text-[0.72rem] text-muted-foreground" data-testid="turn-status">
           {label}
           {turn.backendStatus && ` · 后端状态：${turn.backendStatus}`}
+          {turn.actualModel && ` · 实际模型：${turn.actualModel}`}
+          {turn.fallbackReason && ` · 已回退（${turn.fallbackReason}）`}
         </p>
         {turn.stopError && <p role="alert" className="mt-1 px-1 text-xs text-danger">停止请求失败：{turn.stopError}</p>}
       </div>
@@ -56,6 +58,7 @@ export function TurnFooter({ turn, onRetry, onDismiss }: { turn: ActiveTurn; onR
         {!failed && turn.transport === 'http' && '已取消等待，后端可能仍在处理这条消息。'}
       </p>
       {failed && turn.error?.detail && <p className="mt-0.5 break-words text-muted-foreground">{turn.error.detail}</p>}
+      {failed && turn.reuseRequest && <p className="mt-0.5 text-muted-foreground">重试会沿用原请求，避免网络中断后重复生成；如果原请求已失败，请重新编辑发送。</p>}
       <div className="mt-2 flex gap-2">
         <Button size="sm" variant="outline" onClick={onRetry}>
           <RotateCcw /> 重新发送

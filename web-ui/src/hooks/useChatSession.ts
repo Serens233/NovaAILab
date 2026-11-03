@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNovaAdapter } from '@/services/novaContext';
-import { describeError, isAbortError } from '@/services/api/errors';
+import { describeError, isAbortError, isNovaApiError } from '@/services/api/errors';
 import type { BackendCapabilities, NovaMessage } from '@/types/nova';
 import { createClientId } from '@/utils/id';
+import { useUiStore } from '@/stores/uiStore';
 import { queryKeys } from './queries';
 
 /**
@@ -25,6 +26,9 @@ export interface ActiveTurn {
   receivedFirstChunk: boolean;
   backendStatus?: string;
   assistantMessageId?: string;
+  actualModel?: string;
+  fallbackReason?: string;
+  reuseRequest?: boolean;
   error?: { title: string; detail?: string; kind: string };
   stopError?: string;
 }
@@ -44,11 +48,19 @@ export function useChatSession(conversationId: string | undefined, capabilities:
   // 切换会话或卸载时：取消进行中的请求，释放流与定时器
   useEffect(() => {
     return () => {
-      controllerRef.current?.abort();
+      const controller = controllerRef.current;
+      const current = turnRef.current;
+      if (controller && current && current.conversationId === conversationId && current.requestId && adapter.mode === 'real') {
+        // Cancel the server run with its original ID; aborting fetch alone only stops reception.
+        void adapter.stopGeneration({ conversationId: current.conversationId, requestId: current.requestId })
+          .catch(() => useUiStore.getState().setNotice('切换会话时未能确认停止生成，原会话可能仍在处理，请返回检查。'));
+      }
+      if (current && current.conversationId === conversationId && current.requestId) adapter.forgetRequest?.(current.requestId);
+      controller?.abort();
       controllerRef.current = null;
       setTurn(null);
     };
-  }, [conversationId]);
+  }, [adapter, conversationId]);
 
   const commitMessages = useCallback(
     (convId: string, msgs: NovaMessage[]) => {
@@ -66,11 +78,14 @@ export function useChatSession(conversationId: string | undefined, capabilities:
     !!capabilities && (capabilities.streaming === 'sse' || capabilities.streaming === 'ndjson');
 
   const send = useCallback(
-    async (content: string, targetConversationId?: string) => {
+    async (content: string, targetConversationId?: string, retryRequestId?: string) => {
       const convId = targetConversationId ?? conversationId;
       const text = content.trim();
       if (!convId || !text) return;
       if (controllerRef.current && !controllerRef.current.signal.aborted) return;
+
+      const previous = turnRef.current;
+      if (previous?.requestId && previous.requestId !== retryRequestId) adapter.forgetRequest?.(previous.requestId);
 
       controllerRef.current?.abort();
       const controller = new AbortController();
@@ -87,7 +102,7 @@ export function useChatSession(conversationId: string | undefined, capabilities:
       const transport = useStreaming ? 'stream' : 'http';
       const initial: ActiveTurn = {
         conversationId: convId,
-        requestId: adapter.mode === 'real' ? crypto.randomUUID() : undefined,
+        requestId: adapter.mode === 'real' ? retryRequestId ?? crypto.randomUUID() : undefined,
         userMessage,
         phase: transport === 'stream' ? 'sending' : 'waiting',
         transport,
@@ -104,6 +119,8 @@ export function useChatSession(conversationId: string | undefined, capabilities:
       let draft = '';
       let assistantId: string | undefined;
       let storedUserId: string | undefined;
+      let actualModel: string | undefined;
+      let fallbackReason: string | undefined;
       try {
         if (transport === 'stream') {
           for await (const ev of adapter.streamMessage(input, { signal: controller.signal })) {
@@ -111,8 +128,11 @@ export function useChatSession(conversationId: string | undefined, capabilities:
             if (ev.type === 'start') {
               assistantId = ev.messageId ?? assistantId;
               storedUserId = ev.userMessageId ?? storedUserId;
+              actualModel = ev.model ?? actualModel;
+              fallbackReason = ev.fallbackReason ?? fallbackReason;
               update({
                 phase: 'streaming', assistantMessageId: assistantId,
+                actualModel, fallbackReason,
                 ...(storedUserId && { userMessage: { ...userMessage, messageId: storedUserId } }),
               });
             } else if (ev.type === 'status') {
@@ -129,6 +149,8 @@ export function useChatSession(conversationId: string | undefined, capabilities:
                 timestamp: ev.message?.timestamp ?? new Date().toISOString(),
                 channelType: 'web',
                 deliveryStatus: ev.message?.deliveryStatus,
+                model: ev.message?.model ?? actualModel,
+                fallbackReason,
               };
               commitMessages(convId, [
                 ...(storedUserId ? [{ ...userMessage, messageId: storedUserId }] : adapter.mode === 'mock' ? [userMessage] : []),
@@ -174,7 +196,11 @@ export function useChatSession(conversationId: string | undefined, capabilities:
           return;
         }
         const info = describeError(err);
-        setTurn((prev) => (prev ? { ...prev, phase: 'failed', draft, error: info } : prev));
+        const reuseRequest = adapter.mode === 'real' && (!isNovaApiError(err) ||
+          (!err.terminal && (err.kind === 'network' || err.kind === 'timeout' || err.kind === 'stream' ||
+            err.kind === 'parse' || err.status === 409 || (err.status ?? 0) >= 500)));
+        if (!reuseRequest && initial.requestId) adapter.forgetRequest?.(initial.requestId);
+        setTurn((prev) => (prev ? { ...prev, phase: 'failed', draft, error: info, reuseRequest } : prev));
       } finally {
         if (controllerRef.current === controller) controllerRef.current = null;
         if (adapter.mode === 'real') {
@@ -223,10 +249,15 @@ export function useChatSession(conversationId: string | undefined, capabilities:
     const content = current.userMessage.content;
     const convId = current.conversationId;
     setTurn(null);
-    void send(content, convId);
+    // A transport failure may have occurred after the server saved a reply.
+    // Reusing the ID lets the server replay or report the existing run.
+    void send(content, convId, current.reuseRequest ? current.requestId : undefined);
   }, [send]);
 
-  const dismiss = useCallback(() => setTurn(null), []);
+  const dismiss = useCallback(() => {
+    if (turnRef.current?.requestId) adapter.forgetRequest?.(turnRef.current.requestId);
+    setTurn(null);
+  }, [adapter]);
 
   const isBusy = !!turn && ['sending', 'waiting', 'streaming'].includes(turn.phase);
 

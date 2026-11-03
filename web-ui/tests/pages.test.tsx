@@ -76,6 +76,15 @@ describe('星图档案馆', () => {
 });
 
 describe('响应式布局', () => {
+  it('删除会话前提示已有数据库备份可能仍包含对话', async () => {
+    setViewportWidth(1440);
+    const user = userEvent.setup();
+    renderApp('/chat/mock-conv-orion');
+    await screen.findByText('今晚能看到猎户座吗？');
+    await user.click(screen.getByRole('button', { name: '「猎户座的观星笔记」的更多操作' }));
+    await user.click(await screen.findByRole('menuitem', { name: '删除' }));
+    expect(await screen.findByText(/先前创建的数据库备份可能仍包含这段对话/)).toBeInTheDocument();
+  });
   it('手机宽度：左侧导航为抽屉，右侧角色状态为独立面板', async () => {
     setViewportWidth(390);
     const user = userEvent.setup();

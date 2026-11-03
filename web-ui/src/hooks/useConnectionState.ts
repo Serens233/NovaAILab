@@ -37,7 +37,10 @@ export function useConnectionState() {
   const browserOnline = useBrowserOnline();
 
   let state: ConnectionState;
-  if (!browserOnline && adapter.mode === 'real') state = 'browser_offline';
+  // navigator.onLine describes the network, not reachability of a local backend.
+  // A successful health check is authoritative even while the internet is offline.
+  if (health.data?.state === 'online' || health.data?.state === 'degraded') state = health.data.state;
+  else if (!browserOnline && adapter.mode === 'real' && !health.data) state = 'browser_offline';
   else if (!health.data) state = health.isError ? 'offline' : 'checking';
   else state = health.data.state;
 

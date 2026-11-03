@@ -220,6 +220,7 @@ function DeleteDialog({
           <DialogTitle>删除夜航记录？</DialogTitle>
           <DialogDescription>
             「{conversation?.title}」将从{conversation?.localOnly ? '当前页面' : ' Nova 后端'}删除。此操作由后端执行，可能无法撤销。
+            {!conversation?.localOnly && ' 先前创建的数据库备份可能仍包含这段对话。'}
           </DialogDescription>
         </DialogHeader>
         {del.isError && <ErrorNotice error={del.error} compact />}

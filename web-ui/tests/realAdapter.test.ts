@@ -12,6 +12,8 @@ const input = { conversationId: threadId, content: 'hi', clientMessageId: 'u-loc
 const thread = { id: threadId, title: '夜航', model: 'qwen3.5:4b', created_at: time, updated_at: time };
 const reply = { id: 'a1', thread_id: threadId, role: 'assistant', content: '晚上好', status: 'complete', created_at: time };
 const modelRoute = 'GET /api/v1/models';
+const threadRoute = 'GET /api/v1/threads/' + threadId;
+const threadResponse = () => json({ thread, messages: [] });
 const models = () => json({
   default_model: 'qwen3.5:4b',
   preferred_model: 'experimental',
@@ -122,8 +124,38 @@ describe('RealAdapter：会话 CRUD 和已保存消息', () => {
 });
 
 describe('RealAdapter：发送消息', () => {
+  it('保留会话指定模型，不随全局默认模型变化静默切换', async () => {
+    const f = fakeFetch({
+      [threadRoute]: () => json({ thread: { ...thread, model: 'qwen3.5:9b' }, messages: [] }),
+      [modelRoute]: models,
+      'POST /api/v1/chat': () => json({ thread_id: threadId, message: { ...reply, model: 'qwen3.5:9b' } }),
+    });
+    const a = new RealAdapter({ ...base, streamProtocol: 'none', fetchImpl: f.fetch });
+    const result = await a.sendMessage(input);
+    expect(f.calls.find((c) => c.method === 'POST')?.body).toMatchObject({ model: 'qwen3.5:9b' });
+    expect(result.assistantMessage.model).toBe('qwen3.5:9b');
+  });
+
+  it('不确定状态重试时即使会话模型改变，也沿用原请求模型', async () => {
+    let attempt = 0;
+    const f = fakeFetch({
+      [threadRoute]: threadResponse,
+      'GET /api/v1/threads': () => json({ threads: [{ ...thread, model: 'qwen3.5:9b' }] }),
+      'POST /api/v1/chat': () => {
+        if (++attempt === 1) throw new TypeError('连接丢失');
+        return json({ thread_id: threadId, message: reply });
+      },
+    });
+    const a = new RealAdapter({ ...base, streamProtocol: 'none', fetchImpl: f.fetch });
+    await expect(a.sendMessage(input)).rejects.toMatchObject({ kind: 'network' });
+    await a.listConversations();
+    await a.sendMessage(input);
+    const posts = f.calls.filter((c) => c.method === 'POST');
+    expect(posts.map((c) => (c.body as { model: string }).model)).toEqual(['qwen3.5:4b', 'qwen3.5:4b']);
+  });
+
   it('后端 500 时显示公开错误提示', async () => {
-    const f = fakeFetch({ [modelRoute]: models, 'POST /api/v1/chat': () => json({ error: { message: 'LLM 服务不可用' } }, 500) });
+    const f = fakeFetch({ [threadRoute]: threadResponse, 'POST /api/v1/chat': () => json({ error: { message: 'LLM 服务不可用' } }, 500) });
     const a = new RealAdapter({ ...base, streamProtocol: 'none', fetchImpl: f.fetch });
     const err = await a.sendMessage(input).catch((e) => e);
     expect(err).toBeInstanceOf(NovaApiError);
@@ -131,7 +163,7 @@ describe('RealAdapter：发送消息', () => {
   });
 
   it('普通响应带正式消息 ID，请求只发送真实协议的字段', async () => {
-    const f = fakeFetch({ [modelRoute]: models, 'POST /api/v1/chat': () => json({ thread_id: threadId, message: reply }) });
+    const f = fakeFetch({ [threadRoute]: threadResponse, 'POST /api/v1/chat': () => json({ thread_id: threadId, message: reply }) });
     const a = new RealAdapter({ ...base, streamProtocol: 'none', fetchImpl: f.fetch });
     expect(await a.sendMessage(input)).toMatchObject({ assistantMessage: { messageId: 'a1', content: '晚上好' } });
     expect(f.calls.at(-1)?.body).toEqual({
@@ -139,12 +171,9 @@ describe('RealAdapter：发送消息', () => {
     });
   });
 
-  it('缺少已安装的稳定本地模型时禁止云端或实验模型回退', async () => {
+  it('会话模型不受支持时禁止云端或实验模型回退', async () => {
     const f = fakeFetch({
-      [modelRoute]: () => json({ default_model: 'qwen3.5:9b', models: [
-        { id: 'qwen3.5:9b', provider: 'ollama', available: false },
-        { id: 'deepseek', provider: 'deepseek', available: true },
-      ] }),
+      [threadRoute]: () => json({ thread: { ...thread, model: 'deepseek' }, messages: [] }),
     });
     const a = new RealAdapter({ ...base, streamProtocol: 'none', fetchImpl: f.fetch });
     await expect(a.sendMessage(input)).rejects.toMatchObject({ kind: 'not_configured' });
@@ -154,6 +183,7 @@ describe('RealAdapter：发送消息', () => {
   it('早到的真实取消 HTTP 409 识别为取消，stop 使用原始请求 UUID', async () => {
     const f = fakeFetch({
       [modelRoute]: models,
+      [threadRoute]: threadResponse,
       'POST /api/v1/chat/cancel': () => json({ cancel_requested: true }),
       'POST /api/v1/chat': () => json({ error: { code: 'CHAT_CANCELLED', message: '生成已取消' } }, 409),
     });
@@ -169,6 +199,7 @@ describe('RealAdapter：SSE 流式', () => {
     ...base, streamProtocol: 'sse',
     fetchImpl: fakeFetch({
       [modelRoute]: models,
+      [threadRoute]: threadResponse,
       'POST /api/v1/chat': () => new Response(stream, { headers: { 'Content-Type': 'text/event-stream; charset=utf-8' } }),
     }).fetch,
   });
@@ -184,6 +215,18 @@ describe('RealAdapter：SSE 流式', () => {
     expect(events.map((e) => e.type)).toEqual(['start', 'delta', 'delta', 'done']);
     expect(events[0]).toMatchObject({ messageId: 'a1', userMessageId: 'u1', conversationId: threadId });
     expect(events[3]).toMatchObject({ message: { messageId: 'a1', content: '晚上好', deliveryStatus: 'complete' } });
+  });
+
+  it('允许同一请求的回退元数据更新并展示实际模型', async () => {
+    const { stream } = chunkedStream([
+      sse({ ...meta, model: 'qwen3.5:9b' }),
+      sse({ ...meta, model: 'qwen3.5:4b', fallback_reason: 'GPU_MEMORY_INSUFFICIENT' }),
+      sse({ type: 'done', message: { ...reply, model: 'qwen3.5:4b' } }),
+    ]);
+    const events: StreamEvent[] = [];
+    for await (const ev of sseAdapter(stream).streamMessage(input, {})) events.push(ev);
+    expect(events[1]).toMatchObject({ type: 'start', model: 'qwen3.5:4b', fallbackReason: 'GPU_MEMORY_INSUFFICIENT' });
+    expect(events[2]).toMatchObject({ message: { model: 'qwen3.5:4b' } });
   });
 
   it.each([

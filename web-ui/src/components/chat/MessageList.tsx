@@ -83,8 +83,8 @@ export function MessageList({
       >
         <div className="mx-auto flex w-full max-w-[var(--nova-chat-max-width)] flex-col gap-5 px-3 py-6 sm:px-6">
           {header}
-          {messages.map((m) => (
-            <MessageBubble key={m.messageId} message={m} />
+          {messages.map((m, index) => (
+            <MessageBubble key={m.messageId} message={m} requestedModel={m.role === 'assistant' && messages[index - 1]?.role === 'user' ? messages[index - 1]?.model : undefined} />
           ))}
           {turn && showTurnUser && (
             <MessageBubble

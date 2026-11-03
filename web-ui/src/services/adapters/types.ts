@@ -20,6 +20,8 @@ export interface CallOptions {
  * 注意：方法名不代表后端存在同名端点；真实路由见 realRoutes.ts。
  */
 export interface NovaAdapter {
+  /** 放弃本地重试信息，不影响服务器中的记录。 */
+  forgetRequest?(requestId: string): void;
   readonly mode: 'mock' | 'real';
 
   getBackendHealth(options?: CallOptions): Promise<BackendHealth>;

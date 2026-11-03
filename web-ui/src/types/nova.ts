@@ -31,6 +31,8 @@ export interface NovaMessage {
   channelType?: ChannelType;
   externalMessageId?: string;
   deliveryStatus?: string;
+  model?: string;
+  fallbackReason?: string;
 }
 
 export interface Conversation {
@@ -41,6 +43,7 @@ export interface Conversation {
   channelType?: ChannelType;
   messageCount?: number;
   preview?: string;
+  model?: string;
   /** 仅保存在当前页面内存中的临时会话（后端未提供会话持久化时使用），刷新即丢失 */
   localOnly?: boolean;
 }
@@ -99,7 +102,7 @@ export interface MemoryQuery {
 
 /** 流式事件（适配层统一后的格式） */
 export type StreamEvent =
-  | { type: 'start'; messageId?: string; userMessageId?: string; conversationId?: string }
+  | { type: 'start'; messageId?: string; userMessageId?: string; conversationId?: string; model?: string; fallbackReason?: string }
   | { type: 'delta'; text: string }
   | { type: 'status'; label: string }
   | { type: 'done'; message?: Partial<NovaMessage> }

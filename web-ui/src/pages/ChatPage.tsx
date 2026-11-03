@@ -28,6 +28,8 @@ export function ChatPage() {
   const setStatusPanelOpen = useSettingsStore((s) => s.setStatusPanelOpen);
   const statusSheetOpen = useUiStore((s) => s.statusSheetOpen);
   const setStatusSheetOpen = useUiStore((s) => s.setStatusSheetOpen);
+  const notice = useUiStore((s) => s.notice);
+  const setNotice = useUiStore((s) => s.setNotice);
 
   const conn = useConnectionState();
   const caps = useCapabilities().data;
@@ -94,7 +96,7 @@ export function ChatPage() {
         <PageHeader
           leading={<NovaAvatar size="sm" status={conn.state === 'browser_offline' ? 'offline' : conn.state === 'not_configured' ? 'degraded' : conn.state} />}
           title={conversation?.title ?? (conversationId ? '夜航记录' : 'Nova')}
-          subtitle={conversation ? `${conn.label}${conversation.localOnly ? ' · 临时会话（不会保存到后端）' : ''}` : '星图档案馆的夜航记录员'}
+          subtitle={conversation ? `${conn.label}${conversation.model ? ` · 会话模型：${conversation.model}` : ''}${conversation.localOnly ? ' · 临时会话（不会保存到后端）' : ''}` : '星图档案馆的夜航记录员'}
           actions={
             isDesktop ? (
               !statusPanelOpen && (
@@ -118,6 +120,7 @@ export function ChatPage() {
           }
         />
         <ConnectionBanner conn={conn} />
+        {notice && <div role="alert" className="border-b bg-warning/10 px-4 py-2 text-sm">{notice} <button onClick={() => setNotice(null)}>关闭</button></div>}
         {conversation?.localOnly && (
           <div className="border-b bg-warning/10 px-4 py-1.5 text-center text-[0.72rem]">
             后端暂未提供会话持久化接口：这段对话仅保存在当前页面，刷新后会丢失（回复内容来自真实后端）。

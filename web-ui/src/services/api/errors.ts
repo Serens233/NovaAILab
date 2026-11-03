@@ -16,17 +16,20 @@ export class NovaApiError extends Error {
   readonly status?: number;
   readonly detail?: string;
   readonly retryable: boolean;
+  /** 后端已确认本轮结束，而不是传输中断导致结果未知。 */
+  readonly terminal: boolean;
 
   constructor(
     kind: NovaErrorKind,
     message: string,
-    options: { status?: number; detail?: string; cause?: unknown } = {},
+    options: { status?: number; detail?: string; cause?: unknown; terminal?: boolean } = {},
   ) {
     super(message, { cause: options.cause });
     this.name = 'NovaApiError';
     this.kind = kind;
     this.status = options.status;
     this.detail = options.detail;
+    this.terminal = options.terminal ?? false;
     this.retryable =
       kind === 'network' ||
       kind === 'timeout' ||

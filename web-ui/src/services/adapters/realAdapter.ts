@@ -50,6 +50,17 @@ export class RealAdapter implements NovaAdapter {
   private readonly opts: RealAdapterOptions;
   private openApiPromise?: Promise<unknown | null>;
   private streamProtocol: StreamProtocol | 'websocket';
+  private readonly threadModels = new Map<string, string>();
+  private readonly requestModels = new Map<string, string>();
+
+  forgetRequest(requestId: string): void {
+    this.requestModels.delete(requestId);
+  }
+
+  private rememberThread(thread: Conversation): Conversation {
+    if (thread.model) this.threadModels.set(thread.conversationId, thread.model);
+    return thread;
+  }
 
   constructor(opts: RealAdapterOptions) {
     this.opts = opts;
@@ -150,30 +161,33 @@ export class RealAdapter implements NovaAdapter {
 
   async listConversations(options: CallOptions = {}): Promise<Conversation[]> {
     const raw = await this.call<unknown>('listConversations', {}, { signal: options.signal });
-    return unwrapList(raw, ['threads']).map(mapConversation);
+    return unwrapList(raw, ['threads']).map((item) => this.rememberThread(mapConversation(item)));
   }
 
   async createConversation(input: { title?: string } = {}, options: CallOptions = {}): Promise<Conversation> {
     const selection = await this.modelSelection(options.signal);
+    if (!selection.availableModel) throw new NovaApiError('not_configured', '没有可用的本地 9B 或 4B 模型');
     const raw = await this.call<unknown>('createConversation', {}, {
       signal: options.signal,
-      body: { title: input.title, model: selection.availableModel ?? selection.defaultModel },
+      body: { title: input.title, model: selection.availableModel },
     });
-    return mapConversation(raw);
+    return this.rememberThread(mapConversation(raw));
   }
 
   async renameConversation(conversationId: string, title: string, options: CallOptions = {}): Promise<Conversation> {
-    return mapConversation(
+    return this.rememberThread(mapConversation(
       await this.call<unknown>('renameConversation', { conversationId }, { signal: options.signal, body: { title } }),
-    );
+    ));
   }
 
   async deleteConversation(conversationId: string, options: CallOptions = {}): Promise<void> {
     await this.call<unknown>('deleteConversation', { conversationId }, { signal: options.signal });
+    this.threadModels.delete(conversationId);
   }
 
   async getConversationMessages(conversationId: string, options: CallOptions = {}): Promise<NovaMessage[]> {
     const raw = await this.call<unknown>('conversationMessages', { conversationId }, { signal: options.signal });
+    this.rememberThread(mapConversation(raw));
     return unwrapList(raw, ['messages']).map((m) => mapMessage(m, conversationId));
   }
 
@@ -181,22 +195,36 @@ export class RealAdapter implements NovaAdapter {
     return localModelSelection(await this.call<unknown>('models', {}, { signal }));
   }
 
-  private async modelForGeneration(signal?: AbortSignal) {
-    const { availableModel } = await this.modelSelection(signal);
-    if (!availableModel) {
-      throw new NovaApiError('not_configured', '没有可用的本地 9B 或 4B 模型，请确认 Ollama 已启动且模型已安装');
+  private async modelForGeneration(input: SendMessageInput, signal?: AbortSignal) {
+    const previous = input.requestId && this.requestModels.get(input.requestId);
+    if (previous) return previous;
+    let model = this.threadModels.get(input.conversationId);
+    if (!model) {
+      const raw = await this.call<unknown>('conversationMessages', { conversationId: input.conversationId }, { signal });
+      model = this.rememberThread(mapConversation(raw)).model;
     }
-    return availableModel;
+    // The UI only authorizes the two stable local models. Never silently route
+    // other thread models to a local substitute or a cloud provider.
+    if (model !== 'qwen3.5:9b' && model !== 'qwen3.5:4b') {
+      throw new NovaApiError('not_configured', '此会话使用的模型不在当前界面支持的本地模型范围内');
+    }
+    if (input.requestId) {
+      if (this.requestModels.size >= 256) throw new NovaApiError('not_configured', '待确认的请求过多，请刷新会话后再试');
+      this.requestModels.set(input.requestId, model);
+    }
+    return model;
   }
 
   async sendMessage(input: SendMessageInput, options: CallOptions = {}): Promise<SendMessageResult> {
-    const model = await this.modelForGeneration(options.signal);
+    const model = await this.modelForGeneration(input, options.signal);
     const raw = await this.call<unknown>(
       'sendMessage',
       { conversationId: input.conversationId },
       { signal: options.signal, body: toSendMessageBody(input, model, false), timeoutMs: Math.max(this.opts.timeoutMs, 300_000) },
     );
-    return mapSendResult(raw, input);
+    const result = mapSendResult(raw, input);
+    if (input.requestId) this.requestModels.delete(input.requestId);
+    return result;
   }
 
   async *streamMessage(input: SendMessageInput, options: CallOptions): AsyncGenerator<StreamEvent> {
@@ -206,7 +234,7 @@ export class RealAdapter implements NovaAdapter {
       throw new NovaApiError('not_implemented', 'WebSocket 流式尚未接入，请在适配层实现或改用普通响应');
     }
     const spec = this.route('streamMessage');
-    const model = await this.modelForGeneration(options.signal);
+    const model = await this.modelForGeneration(input, options.signal);
     const { response, signal, release } = await httpRaw(
       this.opts.baseUrl,
       resolvePath(spec, { conversationId: input.conversationId }),
@@ -244,13 +272,17 @@ export class RealAdapter implements NovaAdapter {
       for await (const ev of source) {
         if (!ev) continue;
         if (ev.type === 'start') {
-          if (start || ev.conversationId !== input.conversationId || !ev.userMessageId || !ev.messageId) {
+          if (ev.conversationId !== input.conversationId || !ev.userMessageId || !ev.messageId ||
+              (start && (start.messageId !== ev.messageId || start.userMessageId !== ev.userMessageId))) {
             throw new NovaApiError('stream', '后端流式消息 ID 或会话不匹配');
           }
           start = ev;
         }
         if (ev.type === 'error') {
-          throw new NovaApiError(ev.code === 'CHAT_CANCELLED' ? 'aborted' : 'stream', ev.message);
+          if (input.requestId && ev.code !== 'CHAT_SAVE_FAILED') this.requestModels.delete(input.requestId);
+          throw new NovaApiError(ev.code === 'CHAT_CANCELLED' ? 'aborted' : 'stream', ev.message, {
+            terminal: ev.code !== 'CHAT_SAVE_FAILED',
+          });
         }
         if (ev.type === 'done') {
           if (!start || !ev.message || ev.message.messageId !== start.messageId ||
@@ -258,6 +290,7 @@ export class RealAdapter implements NovaAdapter {
               ev.message.deliveryStatus !== 'complete') {
             throw new NovaApiError('stream', '后端流未返回已保存的完整回复');
           }
+          if (input.requestId) this.requestModels.delete(input.requestId);
           yield ev;
           return;
         }
@@ -281,6 +314,7 @@ export class RealAdapter implements NovaAdapter {
       { conversationId: input.conversationId },
       { signal: options.signal, body: { thread_id: input.conversationId, request_id: input.requestId } },
     );
+    this.requestModels.delete(input.requestId);
   }
 
   async getMemoryRecords(query: MemoryQuery = {}, options: CallOptions = {}): Promise<MemoryRecord[]> {
