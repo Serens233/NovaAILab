@@ -34,6 +34,13 @@ class DeepSeekBackend:
             try:
                 control.check()
                 connection = http.client.HTTPSConnection("api.deepseek.com", timeout=120)
+                # 显式连接后、发送正文或读取响应头前绑定socket；头部慢速滴流也可取消。
+                # DNS由操作系统解析，socket超时不能提供其硬期限；TCP/TLS使用连接超时。
+                connect = getattr(connection, "connect", None)
+                if connect is not None:
+                    connect()
+                    control.bind_socket(getattr(connection, "sock", None))
+                control.check()
                 payload = {
                     "model": self.settings.model or "deepseek-chat",
                     "messages": messages,

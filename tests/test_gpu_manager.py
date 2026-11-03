@@ -10,19 +10,6 @@ from nova.gpu.backend import BackendError
 from nova.gpu.manager import GpuManager
 
 
-def practice_policy():
-    return {
-        "practice:tiny": {
-            "model": "practice:tiny",
-            "enabled": True,
-            "required_mib": 1,
-            "min_total_ram_mib": 0,
-            "min_available_ram_mib": 0,
-            "runtime": {},
-        }
-    }
-
-
 class FakeBackend:
     model = "practice:tiny"
 
@@ -73,14 +60,18 @@ class FakeBackend:
         return {"done": True, "response": "合成回复", "load_duration": 42}
 
 
-def manager_for(tmp_path, backend=None, **kwargs):
-    kwargs.setdefault("model_policies", practice_policy())
-    return GpuManager(
-        backend or FakeBackend(), tmp_path / "gpu-mode.json", unload_timeout=0.1, **kwargs
-    )
+@pytest.fixture
+def manager_for(practice_policy):
+    def make(tmp_path, backend=None, **kwargs):
+        kwargs.setdefault("model_policies", practice_policy())
+        return GpuManager(
+            backend or FakeBackend(), tmp_path / "gpu-mode.json", unload_timeout=0.1, **kwargs
+        )
+
+    return make
 
 
-def test_gaming_unloads_every_model_and_auto_does_not_reload(tmp_path):
+def test_gaming_unloads_every_model_and_auto_does_not_reload(tmp_path, manager_for):
     async def scenario():
         backend = FakeBackend()
         backend.models.append({"name": "another:tiny", "size_vram": 456})
@@ -114,7 +105,7 @@ def test_gaming_unloads_every_model_and_auto_does_not_reload(tmp_path):
     asyncio.run(scenario())
 
 
-def test_gate_closes_before_drain_and_auto_cannot_overtake_unload(tmp_path):
+def test_gate_closes_before_drain_and_auto_cannot_overtake_unload(tmp_path, manager_for):
     async def scenario():
         backend = FakeBackend()
         backend.generate_release = asyncio.Event()
@@ -147,7 +138,7 @@ def test_gate_closes_before_drain_and_auto_cannot_overtake_unload(tmp_path):
     asyncio.run(scenario())
 
 
-def test_drain_timeout_preserves_gaming_without_cancelling_generation(tmp_path):
+def test_drain_timeout_preserves_gaming_without_cancelling_generation(tmp_path, manager_for):
     async def scenario():
         backend = FakeBackend()
         backend.generate_release = asyncio.Event()
@@ -185,7 +176,7 @@ def test_drain_timeout_preserves_gaming_without_cancelling_generation(tmp_path):
     asyncio.run(scenario())
 
 
-def test_cancelled_caller_keeps_worker_active_and_blocks_competing_request(tmp_path):
+def test_cancelled_caller_keeps_worker_active_and_blocks_competing_request(tmp_path, manager_for):
     async def scenario():
         backend = FakeBackend()
         backend.generate_release = asyncio.Event()
@@ -215,7 +206,7 @@ def test_cancelled_caller_keeps_worker_active_and_blocks_competing_request(tmp_p
 
 
 @pytest.mark.parametrize("failure", ["unload_error", "retain_after_unload", "status_error"])
-def test_failed_or_unverified_unload_remains_locked(tmp_path, failure):
+def test_failed_or_unverified_unload_remains_locked(tmp_path, failure, manager_for):
     async def scenario():
         backend = FakeBackend()
         setattr(backend, failure, True)
@@ -245,7 +236,7 @@ def test_failed_or_unverified_unload_remains_locked(tmp_path, failure):
     asyncio.run(scenario())
 
 
-def test_uncertain_generation_requires_explicit_unload_before_recovery(tmp_path):
+def test_uncertain_generation_requires_explicit_unload_before_recovery(tmp_path, manager_for):
     async def scenario():
         backend = FakeBackend()
         backend.generate_error = True
@@ -277,7 +268,7 @@ def test_uncertain_generation_requires_explicit_unload_before_recovery(tmp_path)
         "not-json",
     ],
 )
-def test_restarting_never_loses_gaming_or_uncertain_gate(tmp_path, saved):
+def test_restarting_never_loses_gaming_or_uncertain_gate(tmp_path, saved, manager_for):
     async def scenario():
         state_path = tmp_path / "gpu-mode.json"
         original = saved if isinstance(saved, str) else json.dumps(saved)
@@ -300,7 +291,7 @@ def test_restarting_never_loses_gaming_or_uncertain_gate(tmp_path, saved):
     asyncio.run(scenario())
 
 
-def test_cancelled_control_caller_does_not_cancel_unload(tmp_path):
+def test_cancelled_control_caller_does_not_cancel_unload(tmp_path, manager_for):
     async def scenario():
         backend = FakeBackend()
         backend.unload_release = asyncio.Event()
@@ -329,7 +320,7 @@ def test_cancelled_control_caller_does_not_cancel_unload(tmp_path):
     asyncio.run(scenario())
 
 
-def test_existing_other_model_is_not_evicted_by_wake(tmp_path):
+def test_existing_other_model_is_not_evicted_by_wake(tmp_path, manager_for):
     async def scenario():
         backend = FakeBackend()
         backend.models = [{"name": "other:large", "size_vram": 456}]
@@ -347,7 +338,7 @@ def test_existing_other_model_is_not_evicted_by_wake(tmp_path):
     asyncio.run(scenario())
 
 
-def test_shutdown_keeps_lease_while_cancelled_control_still_runs(tmp_path):
+def test_shutdown_keeps_lease_while_cancelled_control_still_runs(tmp_path, manager_for):
     async def scenario():
         backend = FakeBackend()
         backend.unload_release = asyncio.Event()

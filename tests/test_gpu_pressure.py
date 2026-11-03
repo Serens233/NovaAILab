@@ -105,19 +105,6 @@ def test_clear_hysteresis_reserves_room_for_model_reload():
     assert not policy.evaluate(clear)["active"]
 
 
-def practice_policy():
-    return {
-        "practice:tiny": {
-            "model": "practice:tiny",
-            "enabled": True,
-            "required_mib": 1,
-            "min_total_ram_mib": 0,
-            "min_available_ram_mib": 0,
-            "runtime": {},
-        }
-    }
-
-
 class Backend:
     model = "practice:tiny"
 
@@ -148,7 +135,7 @@ class Backend:
         return {"done": True}
 
 
-def test_pressure_defers_unload_until_inference_idle_and_records_reason(tmp_path):
+def test_pressure_defers_unload_until_inference_idle_and_records_reason(tmp_path, practice_policy):
     async def run():
         backend = Backend()
         backend.release = asyncio.Event()
@@ -180,7 +167,9 @@ def test_pressure_defers_unload_until_inference_idle_and_records_reason(tmp_path
     asyncio.run(run())
 
 
-def test_pressure_release_never_clears_manual_game_mode_and_state_survives(tmp_path):
+def test_pressure_release_never_clears_manual_game_mode_and_state_survives(
+    tmp_path, practice_policy
+):
     async def run():
         backend = Backend()
         path = tmp_path / "gpu.json"
@@ -204,7 +193,7 @@ def test_pressure_release_never_clears_manual_game_mode_and_state_survives(tmp_p
     asyncio.run(run())
 
 
-def test_pressure_monitor_works_without_game_detection(tmp_path):
+def test_pressure_monitor_works_without_game_detection(tmp_path, practice_policy):
     async def run():
         class Source:
             async def observe(self):

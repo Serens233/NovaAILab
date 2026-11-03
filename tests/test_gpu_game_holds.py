@@ -9,19 +9,6 @@ from nova.errors import ApplicationError
 from nova.gpu.manager import GpuManager
 
 
-def practice_policy():
-    return {
-        "practice:tiny": {
-            "model": "practice:tiny",
-            "enabled": True,
-            "required_mib": 1,
-            "min_total_ram_mib": 0,
-            "min_available_ram_mib": 0,
-            "runtime": {},
-        }
-    }
-
-
 class FakeBackend:
     model = "practice:tiny"
 
@@ -64,16 +51,20 @@ def info(hold):
     }
 
 
-def manager_for(tmp_path, backend):
-    return GpuManager(
-        backend,
-        tmp_path / "gpu-mode.json",
-        detection_enabled=True,
-        model_policies=practice_policy(),
-    )
+@pytest.fixture
+def manager_for(practice_policy):
+    def make(tmp_path, backend):
+        return GpuManager(
+            backend,
+            tmp_path / "gpu-mode.json",
+            detection_enabled=True,
+            model_policies=practice_policy(),
+        )
+
+    return make
 
 
-def test_manual_gaming_survives_game_exit_and_requires_explicit_auto(tmp_path):
+def test_manual_gaming_survives_game_exit_and_requires_explicit_auto(tmp_path, manager_for):
     async def scenario():
         backend = FakeBackend()
         manager = manager_for(tmp_path, backend)
@@ -105,7 +96,7 @@ def test_manual_gaming_survives_game_exit_and_requires_explicit_auto(tmp_path):
     asyncio.run(scenario())
 
 
-def test_manual_auto_cannot_override_detected_game_or_discard_manual_hold(tmp_path):
+def test_manual_auto_cannot_override_detected_game_or_discard_manual_hold(tmp_path, manager_for):
     async def scenario():
         backend = FakeBackend()
         manager = manager_for(tmp_path, backend)
@@ -130,7 +121,7 @@ def test_manual_auto_cannot_override_detected_game_or_discard_manual_hold(tmp_pa
     asyncio.run(scenario())
 
 
-def test_explicit_unload_is_a_manual_hold_not_a_temporary_detector_hold(tmp_path):
+def test_explicit_unload_is_a_manual_hold_not_a_temporary_detector_hold(tmp_path, manager_for):
     async def scenario():
         backend = FakeBackend()
         manager = manager_for(tmp_path, backend)
@@ -150,7 +141,7 @@ def test_explicit_unload_is_a_manual_hold_not_a_temporary_detector_hold(tmp_path
     asyncio.run(scenario())
 
 
-def test_legacy_gaming_state_is_conservatively_migrated_to_manual_hold(tmp_path):
+def test_legacy_gaming_state_is_conservatively_migrated_to_manual_hold(tmp_path, manager_for):
     async def scenario():
         state_path = tmp_path / "gpu-mode.json"
         state_path.write_text(json.dumps({"mode": "GAMING", "uncertain": False}), encoding="utf-8")
@@ -172,7 +163,7 @@ def test_legacy_gaming_state_is_conservatively_migrated_to_manual_hold(tmp_path)
     asyncio.run(scenario())
 
 
-def test_automatic_hold_is_persisted_without_becoming_manual(tmp_path):
+def test_automatic_hold_is_persisted_without_becoming_manual(tmp_path, manager_for):
     async def scenario():
         backend = FakeBackend()
         manager = manager_for(tmp_path, backend)
@@ -196,7 +187,7 @@ def test_automatic_hold_is_persisted_without_becoming_manual(tmp_path):
     asyncio.run(scenario())
 
 
-def test_manual_hold_added_during_auto_unload_survives_automatic_release(tmp_path):
+def test_manual_hold_added_during_auto_unload_survives_automatic_release(tmp_path, manager_for):
     async def scenario():
         backend = FakeBackend()
         backend.unload_release = asyncio.Event()

@@ -14,19 +14,6 @@ from nova.main import create_app
 from nova.storage.database import DatabaseError
 
 
-def practice_policy():
-    return {
-        "practice:tiny": {
-            "model": "practice:tiny",
-            "enabled": True,
-            "required_mib": 1,
-            "min_total_ram_mib": 0,
-            "min_available_ram_mib": 0,
-            "runtime": {},
-        }
-    }
-
-
 class FakeBackend:
     model = "practice:tiny"
 
@@ -44,7 +31,7 @@ class FakeBackend:
         return {"done": True, "response": "SYNTHETIC_PRIVATE_RESPONSE", "load_duration": 42}
 
 
-def test_audit_save_failure_locks_gpu_without_recording_prompt(tmp_path):
+def test_audit_save_failure_locks_gpu_without_recording_prompt(tmp_path, practice_policy):
     async def scenario():
         prompt = "SYNTHETIC_PRIVATE_PROMPT_DO_NOT_RECORD"
         audit_path = tmp_path / "gpu-events.jsonl"
@@ -79,7 +66,7 @@ def test_audit_save_failure_locks_gpu_without_recording_prompt(tmp_path):
 
 
 @pytest.mark.parametrize("operation", ["gaming", "generate"])
-def test_invalid_state_parent_locks_before_model_request(tmp_path, operation):
+def test_invalid_state_parent_locks_before_model_request(tmp_path, operation, practice_policy):
     async def scenario():
         parent_file = tmp_path / "blocked-parent"
         parent_file.write_text("preserve-original-content", encoding="utf-8")

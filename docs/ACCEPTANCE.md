@@ -1,5 +1,15 @@
 # Nova 阶段验收
 
+## Phase 1 整体验收与精简收尾（2026-11-02）
+
+基于远端集成分支 `936b56a`。清理前809项通过；合并5份重复测试工厂、删除冗余策略判定后仍809项通过，无用例或安全断言删除。额外发现慢响应头可绕过总期限，新增9项先失败再修复；最终 **818 passed、0 failed、0 skipped**（19.85秒）。没有更改数据库schema、13条API路径、依赖锁或ModelBackend协议。
+
+前端25项、typecheck/lint/build通过；真实Next+合成上游HTTP34项通过；真实Ollama9B/4B流式/切换/GAMING/重启历史/幂等与空闲检查 **29项通过**，实际空闲卸载182.722347秒，数据库integrity_check=ok、无外键冲突，自有后端正常退出。Ruff静态/108文件格式/工程自检/离线wheel和sdist构建通过。
+
+证据为 `E:\NovaAILab\logs\phase1-acceptance-20261102` 下的 `header-deadlines-full.txt`、`frontend-http-report.json`、`live-summary.json`、`compatibility-check.json`。首次冷请求TTFT约46–52秒，不宣称性能改善；脱敏摘要见 [性能基线](phase1-performance-baseline.json)。
+
+用户明确选择真实游戏切换、27B推理待验收；未调用付费云、未进行浏览器GUI/手机真机验证。结论为本机已覆盖项通过，不能宣称整阶段所有实机项目全部通过。当前清理分支尚未远端合并，GitHub为权威。以下为历史记录。
+
 ## Codex 复审两项修复：实际验收通过（2026-11-02）
 
 用户明确授权修复后在测试通过时合并 PR #5/#6 至 `integration/v3-phase1`。在独立 worktree 追加提交，保留其他 Agent 原工作区；GitHub PR 状态为合并结果的权威来源。

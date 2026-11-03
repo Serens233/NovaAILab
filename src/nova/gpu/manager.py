@@ -22,7 +22,7 @@ from nova.gpu.backend import (
 )
 from nova.gpu.protocol import ModelBackend
 from nova.gpu.resources import get_system_memory, require_system_memory
-from nova.model_policy import is_qwen38_alias, looks_like_qwen38
+from nova.model_policy import is_qwen38_alias
 
 logger = logging.getLogger("nova.gpu")
 
@@ -272,8 +272,6 @@ class GpuManager:
                     "model": model,
                     "runtime": dict(template.get("runtime") or {}),
                 }
-            elif looks_like_qwen38(model):
-                raise ApplicationError("MODEL_POLICY_INVALID", "27B实验模型标识未匹配受控策略", 503)
             else:
                 raise ApplicationError(
                     "MODEL_POLICY_INVALID", "模型尚未登记资源策略，暂不允许加载", 503
@@ -388,17 +386,15 @@ class GpuManager:
             policy = await self._model_policy(target)
             # 一次只允许一个受管模型；外部模型不在这里擅自驱逐。
             models = await self.backend.get_model_status()
-            if policy:
-                self._admit(preparing_task=task)
-                await self._model_policy(target)
-            if target and any(item["name"] != target for item in models):
+            self._admit(preparing_task=task)
+            await self._model_policy(target)
+            if any(item["name"] != target for item in models):
                 raise ApplicationError("GPU_MODEL_CONFLICT", "已有其他模型驻留，请先显式卸载", 409)
             before = await self.backend.get_gpu_memory_usage()
-            if policy:
-                self._admit(preparing_task=task)
-                policy = await self._model_policy(target)
-                self._check_gpu_memory(before, models, target, policy["required_mib"])
-            runtime = policy["runtime"] if policy else {}
+            self._admit(preparing_task=task)
+            policy = await self._model_policy(target)
+            self._check_gpu_memory(before, models, target, policy["required_mib"])
+            runtime = policy["runtime"]
             kwargs = {} if not runtime else {"runtime": runtime}
             result = await (
                 self.backend.wake_model(**kwargs)
@@ -469,8 +465,7 @@ class GpuManager:
         if think is not None and type(think) is not bool:
             raise ApplicationError("CHAT_THINK_INVALID", "思考模式必须为布尔值", 422)
         policy = await self._model_policy(model)
-        if policy:
-            required_mib = policy["required_mib"]
+        required_mib = policy["required_mib"]
         if type(required_mib) is not int or not 1 <= required_mib <= 65536:
             raise ApplicationError("GPU_MEMORY_REQUIREMENT", "模型显存配置无效", 422)
         try:
@@ -497,8 +492,7 @@ class GpuManager:
     async def _prepare_chat(self, model, required_mib):
         task = asyncio.current_task()
         policy = await self._model_policy(model)
-        if policy:
-            required_mib = policy["required_mib"]
+        required_mib = policy["required_mib"]
         await self.backend.ensure_local_model(model)
         self._admit(preparing_task=task)
         await self._model_policy(model)
@@ -540,7 +534,7 @@ class GpuManager:
             self._preparing.discard(task)
             ready.set_result(None)
             started = True
-            runtime = policy["runtime"] if policy else {}
+            runtime = policy["runtime"]
             kwargs = {} if not runtime else {"runtime": runtime}
             if think is not None:
                 kwargs["runtime"] = {**kwargs.get("runtime", {}), "think": think}

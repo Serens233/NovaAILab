@@ -13,7 +13,7 @@ import threading
 import time
 from urllib.error import URLError
 from urllib.parse import urlsplit
-from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
+from urllib.request import HTTPHandler, HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 from nova.gpu.streaming import AnswerFilter, final_answer
 
@@ -55,6 +55,10 @@ class StreamControl:
 
     def bind(self, response):
         connection = getattr(getattr(getattr(response, "fp", None), "raw", None), "_sock", None)
+        self.bind_socket(connection)
+
+    def bind_socket(self, connection):
+        """连接建立后立即登记，在响应头尚未返回时也能中断本请求。"""
         with self._lock:
             self._socket = connection
             interrupted = self.requested or self._expired.is_set()
@@ -103,6 +107,29 @@ def model_allocation(status):
 class _NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
+
+
+class _ControlledHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, *args, control, **kwargs):
+        self._control = control
+        super().__init__(*args, **kwargs)
+
+    def connect(self):
+        self._control.check()
+        super().connect()
+        self._control.bind_socket(self.sock)
+
+
+class _ControlledHTTPHandler(HTTPHandler):
+    """仅为本机HTTP添加socket所有权，不改变urllib无代理/不重定向策略。"""
+
+    def http_open(self, request):
+        control = request._nova_control
+
+        def connection(*args, **kwargs):
+            return _ControlledHTTPConnection(*args, control=control, **kwargs)
+
+        return self.do_open(connection, request)
 
 
 def _model_name(value):
@@ -205,9 +232,21 @@ class OllamaBackend:
             raise BackendError("Ollama 超时必须为 0 至 300 秒之间的有限数值。")
         self.model = _model_name(model)
         self.timeout = float(timeout)
-        self._opener = build_opener(ProxyHandler({}), _NoRedirect())
+        self._opener = build_opener(ProxyHandler({}), _NoRedirect(), _ControlledHTTPHandler())
 
-    def _request(self, method, path, payload=None, *, timeout=None):
+    def _request(self, method, path, payload=None, *, timeout=None, control=None, deadline=None):
+        timeout = self.timeout if timeout is None else timeout
+        control = StreamControl() if control is None else control
+        parent_deadline = deadline is not None
+        deadline = (
+            min(deadline, time.monotonic() + timeout)
+            if deadline is not None
+            else time.monotonic() + timeout
+        )
+        remaining = deadline - time.monotonic()
+        control.check()
+        if remaining <= 0:
+            raise BackendError("本地请求超过时限。")
         body = json.dumps(payload).encode("utf-8") if payload is not None else None
         request = Request(
             self.base_url + path,
@@ -215,11 +254,19 @@ class OllamaBackend:
             method=method,
             headers={"Content-Type": "application/json", "Accept": "application/json"},
         )
+        request._nova_control = control
+        timer = threading.Timer(remaining, control.expire)
+        timer.daemon = True
+        timer.start()
         try:
-            with self._opener.open(request, timeout=timeout or self.timeout) as response:
+            with self._opener.open(
+                request, timeout=remaining if parent_deadline else timeout
+            ) as response:
+                control.bind(response)
                 if not 200 <= response.status < 300:
                     raise BackendError("Ollama 请求失败，请检查本机服务。")
                 raw = response.read(_MAX_RESPONSE_BYTES + 1)
+                control.check()
             if len(raw) > _MAX_RESPONSE_BYTES:
                 raise BackendError("Ollama 响应超过允许大小。")
             result = json.loads(raw)
@@ -227,7 +274,11 @@ class OllamaBackend:
                 raise BackendError("Ollama 返回无效响应，请检查本机服务。")
             return result
         except URLError, OSError, ValueError, http.client.HTTPException, RecursionError:
+            control.check()
             raise BackendError("Ollama 不可用或响应无效，请检查本机服务。") from None
+        finally:
+            timer.cancel()
+            control.unbind()
 
     def _status(self):
         result = self._request("GET", "/api/ps", timeout=5)
@@ -278,12 +329,13 @@ class OllamaBackend:
         """只读安装列表，排除Ollama远程代理；不下载、不加载。"""
         return await asyncio.to_thread(self._installed_models)
 
-    def _ensure_local(self, model=None, *, timeout=None):
+    def _ensure_local(self, model=None, *, timeout=None, control=None, deadline=None):
         model = _model_name(self.model if model is None else model)
         # Ollama 的云模型也可能出现在 tags 中；同时检查名称和远程元数据。
         if model.lower().endswith((":cloud", "-cloud")):
             raise BackendError("此入口仅允许已下载的本地模型，不启用云端调用。")
-        models = self._request("GET", "/api/tags", timeout=timeout or 5).get("models")
+        kwargs = {} if control is None else {"control": control, "deadline": deadline}
+        models = self._request("GET", "/api/tags", timeout=timeout or 5, **kwargs).get("models")
         if not isinstance(models, list):
             raise BackendError("无法确认本地模型是否已安装。")
         item = next(
@@ -331,7 +383,7 @@ class OllamaBackend:
         keep_alive, options = _runtime_config(runtime)
         control = control if control is not None else StreamControl()
         control.check()
-        self._ensure_local(model, timeout=min(5, self.timeout))
+        self._ensure_local(model, timeout=min(5, self.timeout), control=control, deadline=deadline)
         control.check()
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -351,6 +403,7 @@ class OllamaBackend:
             method="POST",
             headers={"Content-Type": "application/json", "Accept": "application/x-ndjson"},
         )
+        request._nova_control = control
         pieces = []
         consumed = 0
         filtered = AnswerFilter()
