@@ -43,6 +43,43 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
+def check_protection(value, *, allow_manual=False, idle_observation=False):
+    """空闲阶段仅等待暂时阻断解除；任何实际保护状态都立即终止。"""
+    detection = value.get("game_detection", {})
+    manual = value.get("manual_gaming") is True
+    expected_manual = allow_manual and manual
+    expected_mode = "GAMING" if expected_manual else "AUTO"
+    expected_source = "manual" if expected_manual else "auto"
+    blocked = value.get("local_requests_blocked")
+    if (
+        (manual and not expected_manual)
+        or value.get("mode") != expected_mode
+        or value.get("mode_source") != expected_source
+        or value.get("detected_gaming") is not False
+        or detection.get("signals", {}).get("confirmed")
+        or detection.get("ready") is not True
+        or detection.get("state") != "monitoring"
+        or value.get("memory_pressure", {}).get("active") is not False
+        or value.get("fault") is not None
+        or value.get("training", {}).get("state") != "idle"
+        or value.get("training", {}).get("lease") is not None
+        or blocked not in (True, False)
+    ):
+        raise RuntimeError("游戏或安全保护生效，停止正向推理；未强行解除自动保护")
+    if blocked and not expected_manual:
+        if idle_observation:
+            return False  # 仅继续观察，不发送请求、不将本次样本当作成功验收。
+        raise RuntimeError("游戏或安全保护生效，停止正向推理；未强行解除自动保护")
+    return True
+
+
+def idle_unload_complete(value):
+    if not check_protection(value, idle_observation=True):
+        return False
+    operation = value.get("last_operation") or {}
+    return operation.get("reason") == "idle_timeout" and value.get("unload_verified") is True
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", required=True, type=Path)
@@ -108,23 +145,14 @@ def main():
         samples.flush()
         return value
 
-    def guard(value, *, allow_manual=False):
-        detection = value.get("game_detection", {})
-        confirmed = detection.get("signals", {}).get("confirmed", [])
-        blocked = value.get("local_requests_blocked") and not (
-            allow_manual and value.get("manual_gaming")
-        )
-        if (
-            value.get("detected_gaming")
-            or confirmed
-            or detection.get("ready") is not True
-            or detection.get("state") != "monitoring"
-            or value.get("memory_pressure", {}).get("active")
-            or value.get("fault")
-            or blocked
-        ):
+    def guard(value, *, allow_manual=False, idle_observation=False):
+        try:
+            return check_protection(
+                value, allow_manual=allow_manual, idle_observation=idle_observation
+            )
+        except RuntimeError:
             report["aborted_for_protection"] = True
-            raise RuntimeError("游戏或安全保护生效，停止正向推理；未强行解除自动保护")
+            raise
 
     def start():
         nonlocal process, server_log, launches
@@ -320,9 +348,12 @@ def main():
         print("Waiting for real 180-second idle unload (no accelerated clock).", flush=True)
         while time.monotonic() < deadline:
             current = status("idle_poll")
-            guard(current)
-            operation = current.get("last_operation") or {}
-            if operation.get("reason") == "idle_timeout" and current["unload_verified"]:
+            try:
+                complete = idle_unload_complete(current)
+            except RuntimeError:
+                report["aborted_for_protection"] = True
+                raise
+            if complete:
                 idle_done = current
                 break
             time.sleep(5)
