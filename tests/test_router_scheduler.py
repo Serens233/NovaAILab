@@ -209,6 +209,102 @@ def test_preparing_training_lease_cannot_be_released_or_double_allocated(tmp_pat
     asyncio.run(scenario())
 
 
+def test_cancelled_claim_can_recover_same_reservation_without_releasing_it(tmp_path):
+    async def scenario():
+        backend = SchedulerBackend()
+        backend.models = [{"name": MODEL, "size_vram": 3000}]
+        backend.unload_release = asyncio.Event()
+        manager = manager_for(tmp_path, backend)
+        await manager.start()
+        job = str(uuid4())
+        claim = asyncio.create_task(manager.claim_training(job, 8000))
+        try:
+            await asyncio.wait_for(backend.unload_started.wait(), timeout=3)
+            lease_id = manager.training_lease["id"]
+            claim.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await claim
+            with pytest.raises(ApplicationError) as caught:
+                await manager.claim_training(job, 8000)
+            assert caught.value.code == "TRAINING_PREPARING"
+            backend.unload_release.set()
+            await asyncio.wait_for(asyncio.gather(*tuple(manager._controls)), timeout=3)
+            recovered = await manager.claim_training(job, 8000)
+            assert recovered["training"]["lease"]["id"] == lease_id
+            assert recovered["training"]["state"] == "reserved"
+            with pytest.raises(ApplicationError) as caught:
+                await manager.claim_training(job, 7000)
+            assert caught.value.code == "TRAINING_JOB_CONFLICT"
+            await manager.set_mode("GAMING")
+            with pytest.raises(ApplicationError) as caught:
+                await manager.claim_training(job, 8000)
+            assert caught.value.code == "GPU_GAMING"
+            assert manager.training_lease["id"] == lease_id
+            await manager.release_training(lease_id, stopped=True)
+        finally:
+            await cleanup(manager, backend)
+
+    asyncio.run(scenario())
+
+
+def test_retry_after_restart_does_not_resume_unknown_training(tmp_path):
+    async def scenario():
+        backend = SchedulerBackend()
+        first = manager_for(tmp_path, backend)
+        job = str(uuid4())
+        await first.start()
+        status = await first.claim_training(job, 8000)
+        lease_id = status["training"]["lease"]["id"]
+        await first.close()
+        second = manager_for(tmp_path, backend)
+        await second.start()
+        try:
+            with pytest.raises(ApplicationError) as caught:
+                await second.claim_training(job, 8000)
+            assert caught.value.code == "TRAINING_STATE_UNKNOWN"
+            assert second.training_lease["id"] == lease_id
+            await second.release_training(lease_id, stopped=True)
+        finally:
+            await cleanup(second, backend)
+
+    asyncio.run(scenario())
+
+
+def test_claim_retry_rechecks_gaming_after_status_await(tmp_path):
+    async def scenario():
+        backend = SchedulerBackend()
+        manager = manager_for(tmp_path, backend)
+        await manager.start()
+        job = str(uuid4())
+        leased = await manager.claim_training(job, 8000)
+        lease_id = leased["training"]["lease"]["id"]
+        entered, proceed = asyncio.Event(), asyncio.Event()
+        original = backend.get_model_status
+
+        async def delayed_status():
+            entered.set()
+            await proceed.wait()
+            return await original()
+
+        backend.get_model_status = delayed_status
+        retry = asyncio.create_task(manager.claim_training(job, 8000))
+        try:
+            await asyncio.wait_for(entered.wait(), timeout=3)
+            manager.manual_gaming = True
+            manager.mode = "GAMING"
+            proceed.set()
+            with pytest.raises(ApplicationError) as caught:
+                await retry
+            assert caught.value.code == "GPU_GAMING"
+            assert manager.training_lease["id"] == lease_id
+            await manager.release_training(lease_id, stopped=True)
+        finally:
+            proceed.set()
+            await cleanup(manager, backend, retry)
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize("unavailable", [False, True])
 def test_failed_training_memory_preflight_removes_undelivered_reservation(tmp_path, unavailable):
     async def scenario():

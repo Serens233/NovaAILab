@@ -68,7 +68,6 @@ export function NovaApp() {
     const [models, setModels] = useState<Model[]>([]);
     const [model, setModel] = useState(initialModel);
     const [error, setError] = useState<string | null>(null);
-    const [cloudConsent, setCloudConsent] = useState(false);
     const [theme, setTheme] = useState("dark");
     const [mobileOpen, setMobileOpen] = useState(false);
     const [gpu, setGpu] = useState<Gpu | null>(null);
@@ -115,13 +114,16 @@ export function NovaApp() {
     const selected = models.find((item) => item.id === model);
     const changeModel = useCallback((id: string) => {
         setModel(id);
-        setCloudConsent(false);
         setError(null);
     }, []);
     return (
         <NovaRuntime
             model={model}
-            cloudConsent={cloudConsent}
+            confirmCloud={() =>
+                window.confirm(
+                    "本次将当前消息和所选会话历史发送至 DeepSeek，可能产生费用。是否同意？",
+                )
+            }
             onError={setError}
             onModel={changeModel}
         >
@@ -244,15 +246,7 @@ export function NovaApp() {
                     {selected?.provider === "deepseek" && (
                         <div className="cloud-notice">
                             <Cloud size={16} />
-                            <span>DeepSeek 会将本次对话发送至云端，并可能产生 API 费用。</span>
-                            <label>
-                                <input
-                                    type="checkbox"
-                                    checked={cloudConsent}
-                                    onChange={(event) => setCloudConsent(event.target.checked)}
-                                />
-                                我同意发送并使用收费 API
-                            </label>
+                            <span>每次发送前将确认云端使用及会话历史，可能产生 API 费用。</span>
                         </div>
                     )}
                     <ChatThread
@@ -309,7 +303,12 @@ function ThreadItem({ onSelect }: { onSelect: () => void }) {
                 aria-label={`删除对话：${title}`}
                 title="删除对话"
                 onClick={async () => {
-                    if (!window.confirm(`删除“${title}”？此操作会删除这段聊天历史。`)) return;
+                    if (
+                        !window.confirm(
+                            `删除“${title}”？此操作会删除这段聊天历史；先前创建的数据库备份可能仍包含该对话。`,
+                        )
+                    )
+                        return;
                     setDeleting(true);
                     try {
                         await aui.threadListItem.delete();
@@ -368,8 +367,7 @@ function ModelPicker({
 
 function ChatThread({ model, blocked }: { model?: Model; blocked: boolean }) {
     const settings = useNovaSettings();
-    const canSend =
-        model?.available && !blocked && (model.provider !== "deepseek" || settings.cloudConsent);
+    const canSend = model?.available && !blocked;
     return (
         <ThreadPrimitive.Root className="chat-thread">
             <ThreadPrimitive.Viewport className="chat-viewport">

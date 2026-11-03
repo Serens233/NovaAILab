@@ -2,6 +2,10 @@
 
 日期按 Asia/Shanghai 记录。只写实际执行结果，不用计划替代命令。Phase 0 历史见 [进度记录](docs/progress.md)。
 
+## 全项目审查修复（2026-11-04）
+
+独立分支修复 Windows 实例锁、训练预留重试、聊天历史并发与落库失败恢复，以及旧前端逐次云端确认；无新依赖和 schema 变更。`.venv\Scripts\python.exe -B -m pytest -p no:cacheprovider -q --basetemp E:\NovaAILab\logs\review-fixes-full-20261104`：1005 passed；Ruff check、126 文件 format check、工程自检 5 项通过。`frontend` 的 `npm run test` 26 项通过，typecheck、lint、build 成功；Next 生产网关对替身上游的 34 项检查通过。游戏、27B、真实付费云端和手机浏览器未在本轮执行，角色质量仍待修复及独立验收。设计与升级限制见 [D021](docs/decisions.md)。
+
 ## Phase 2 角色答复复验（2026-11-04）
 
 按负责人要求修正虚称操作及时间精度。首轮提示过长，测试 987 通过、2 失败；压缩后两轮各对 9B/4B 运行原固定题集，最终完整后端回归 989 通过。9B 日程案例改善，4B 仍擅补周次并出现临时标记误拒。此项未通过角色质量验收，详见 [候选报告](docs/PHASE2_ACCEPTANCE.md)。

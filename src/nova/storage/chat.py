@@ -300,7 +300,7 @@ class ChatStore:
                 "is_replay": True,
             }
 
-    def begin_run(self, thread_id, model, content, request_id):
+    def begin_run(self, thread_id, model, content, request_id, *, prepare=None):
         model = _text(model, "模型标识不合法", maximum=128)
         content = _text(content, "消息内容不能为空")
         request_id = _text(request_id, "请求标识不合法", maximum=128)
@@ -327,6 +327,40 @@ class ChatStore:
                     "is_replay": True,
                 }
             self._require_idle(connection, thread_id)
+            prepared = None
+            if prepare is not None:
+                # 每个完整回合均由相邻用户/助手消息构成；有界读取避免长会话全表载入。
+                pairs = []
+                before = 9223372036854775807
+                while len(pairs) < 10:
+                    batch = connection.execute(
+                        "SELECT u.id AS user_id, a.id AS assistant_id, u.position, "
+                        "u.content AS user_content, a.content AS assistant_content "
+                        "FROM nova_messages u JOIN nova_messages a "
+                        "ON a.thread_id = u.thread_id AND a.position = u.position + 1 "
+                        "WHERE u.thread_id = ? AND u.role = 'user' AND u.status = 'complete' "
+                        "AND a.role = 'assistant' AND a.status = 'complete' AND u.position < ? "
+                        "ORDER BY u.position DESC LIMIT 10",
+                        (thread_id, before),
+                    ).fetchall()
+                    if not batch:
+                        break
+                    for pair in batch:
+                        if pair["user_content"].strip() and pair["assistant_content"].strip():
+                            pairs.append(pair)
+                            if len(pairs) == 10:
+                                break
+                    before = batch[-1]["position"]
+                history = []
+                for pair in reversed(pairs):
+                    history.extend(
+                        (
+                            self._message(connection, pair["user_id"]),
+                            self._message(connection, pair["assistant_id"]),
+                        )
+                    )
+                # 预留及上下文校验处于同一受锁事务，失败回滚且不生成聊天记录。
+                prepared = prepare(history)
             position = connection.execute(
                 "SELECT COALESCE(MAX(position), -1) + 1 FROM nova_messages WHERE thread_id = ?",
                 (thread_id,),
@@ -360,6 +394,7 @@ class ChatStore:
                 "user_message": self._message(connection, user_id),
                 "assistant_message": self._message(connection, assistant_id),
                 "is_replay": False,
+                **({"prepared": prepared} if prepare is not None else {}),
             }
 
     def finish_run(self, run_id, content, status="complete", *, actual_model=None):
