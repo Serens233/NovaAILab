@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "bundle_version": "1.0.0",
+  "files": {
+    "canon-v1.json": "52c150d114dc3ad093d917f01cf8476ffcc503d4ee304667b38ca068091b2625",
+    "persona-v1.json": "20b291981b2adcd821029411209a5556e5f953188a6e14f1b17451c0e79b8d43"
+  }
+}

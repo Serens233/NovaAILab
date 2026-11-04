@@ -18,7 +18,7 @@ import { historyMessage } from "@/lib/history";
 
 type Settings = {
     model: string;
-    cloudConsent: boolean;
+    confirmCloud: () => boolean;
     onError: (error: string | null) => void;
     onModel: (model: string) => void;
 };
@@ -88,13 +88,13 @@ function metadata(thread: Thread) {
 export function NovaRuntime({
     children,
     model,
-    cloudConsent,
+    confirmCloud,
     onError,
     onModel,
 }: Settings & { children: ReactNode }) {
     const settings = useMemo(
-        () => ({ model, cloudConsent, onError, onModel }),
-        [model, cloudConsent, onError, onModel],
+        () => ({ model, confirmCloud, onError, onModel }),
+        [model, confirmCloud, onError, onModel],
     );
     const current = useRef(settings);
     current.current = settings;

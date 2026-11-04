@@ -2,6 +2,32 @@
 
 日期按 Asia/Shanghai 记录。只写实际执行结果，不用计划替代命令。Phase 0 历史见 [进度记录](docs/progress.md)。
 
+## 合并前训练租约复审修复（2026-11-04）
+
+复审以异步替身重现两个竞态：首次预留尚未完成时其他请求可取得 reserved，首次请求失败可能清除已交付租约；等待状态时切换游戏模式，原申请可能仍返回成功。改为完成最后异步查询及游戏准入后才同步提交 reserved；失败仅回滚自身未提交的预留，外层恢复时再检查游戏与租约。状态暴露、取消、游戏切换、旧请求晚失败和落盘失败重启均有新增测试，独立复审未发现剩余确定性阻塞。完整 pytest 1034 项通过，GPU/Router 扩展 535 项、Ruff 检查和格式检查通过；未启动真实训练或游戏。Windows 与 WSL GPU Manager 不得同时控制同一个 Ollama。
+
+## 全项目审查修复（2026-11-04）
+
+独立分支修复 Windows 实例锁、训练预留重试、聊天历史并发与落库失败恢复，以及旧前端逐次云端确认；无新依赖和 schema 变更。`.venv\Scripts\python.exe -B -m pytest -p no:cacheprovider -q --basetemp E:\NovaAILab\logs\review-fixes-full-20261104`：1005 passed；Ruff check、126 文件 format check、工程自检 5 项通过。`frontend` 的 `npm run test` 26 项通过，typecheck、lint、build 成功；Next 生产网关对替身上游的 34 项检查通过。游戏、27B、真实付费云端和手机浏览器未在本轮执行，角色质量仍待修复及独立验收。设计与升级限制见 [D021](docs/decisions.md)。
+
+整合 UI 分支后，隔离数据目录启动实际 UI-01 网关及 FastAPI：页面 HTTP 200、健康接口 `database=ok`、正常退出。启用自动检测与压力保护执行 `harness/verify_automatic_live.py`，真实本机 Ollama 4B/GPU 验收 17 项通过，包含手动 GAMING 卸载与拒绝请求、重启保持、恢复 AUTO 按需加载和最终卸载；结束时 `/api/ps` 无模型。该测试未启动真实游戏，不能代替自动游戏检测实测。
+
+第一次 `harness/verify_v2_live.py` 真实聊天测试在空闲期遇到短暂 `local_requests_blocked=true` 后退出；此前 9B/4B 流式聊天及手动游戏门禁检查通过，最终卸载且服务正常退出。紧接着日志出现卸载完成记录，状态接口不提供阻断原因，不能断言二者的因果关系。验收脚本已改为仅在确认 AUTO、无游戏/压力/故障/训练且只观察空闲状态时等待短暂阻断解除；任何真实保护状态仍终止，阻断样本不能算成功。24 项保护边界测试通过。首次失败原始证据保存在仓库外 `E:\NovaAILab\logs\review-fixes-chat-live-20261104`。
+
+修复后在整合 UI 分支重跑完整 pytest：1029 passed；`verify_v2_live.py` 真实 Ollama 9B/4B 回归 29 项通过，记录的空闲卸载间隔 184.421957 秒；包括游戏模式门禁、恢复后按需加载、历史重启保留和幂等重放无重载。两次后端均正常退出，最终 `/api/ps` 无模型。复验报告在仓库外 `E:\NovaAILab\logs\review-fixes-chat-live-retry-20261104`；完整 V2 验收不因此标为完成。
+
+## Phase 2 角色答复复验（2026-11-04）
+
+按负责人要求修正虚称操作及时间精度。首轮提示过长，测试 987 通过、2 失败；压缩后两轮各对 9B/4B 运行原固定题集，最终完整后端回归 989 通过。9B 日程案例改善，4B 仍擅补周次并出现临时标记误拒。此项未通过角色质量验收，详见 [候选报告](docs/PHASE2_ACCEPTANCE.md)。
+
+## Phase 2 人格与对话编排候选（2026-11-02 至 2026-11-03）
+
+从独立 Phase 1 验收基线 `4fad26f` 建立功能分支。先提交审计与冻结题集，再依次提交三层人格、对话接入、评估工具和备用模型预算修复。输入及模型输出仅作为低信任数据，Canon 和批准 Persona 经 Git 审查的固定 bundle 生效。编排沿用 ChatService 和 GPU Manager，依赖锁和 OpenAPI 相等。
+
+后端最终回归 989 项通过，前端 25 项、Next HTTP 34 项、类型检查、格式检查、构建与 wheel 人格数据导入通过。真实 9B/4B 合成评测共 24 题、38 次生成。冷启动与热启动各模型前后各测 1 次，记录为样本结果。辅助评分保留主观维度与不适用项，人工评分仍待负责人填写。完整证据与已知问题见 [Phase 2 候选报告](docs/PHASE2_ACCEPTANCE.md)。
+
+真实 Ollama 最终回归 29 项通过。GAMING 卸载及拒绝新请求、AUTO 按需加载、180.42 秒空闲卸载、重启历史和幂等重放均有本机证据。SQLite 完整性检查通过，两次后端退出 0，最终模型列表为空。
+
 ## Codex 复审修复（2026-11-02）
 
 用户明确授权修复并在测试通过后合并 #5/#6。使用独立 `nova-codex-reclaim-fix`、`nova-codex-policy-fix` worktree；P1 线程回归先在旧实现失败，再提交 `9d10341` 修复；P2 未知策略 15 项先全红，补拒绝与 API 回归并提交 `c4e3df6`。合并两提交后实际运行 809 passed、0 failed、0 skipped（15.84秒），没有 xfail/skip 隐藏问题。

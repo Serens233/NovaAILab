@@ -5,12 +5,14 @@ import logging
 import time
 
 from nova.chat.cloud import DeepSeekBackend
+from nova.chat.orchestrator import SYSTEM_MESSAGE as SYSTEM_MESSAGE
+from nova.chat.orchestrator import ConversationOrchestrator
 from nova.chat.registry import ModelRegistry
 from nova.errors import ApplicationError
 from nova.gpu.backend import BackendError, StreamControl
+from nova.persona import PersonaConfigError, PersonaManager
 
 logger = logging.getLogger("nova.chat")
-SYSTEM_MESSAGE = "你是Nova，一位温暖、诚实、务实的中文AI助手。清楚区分已知事实和不确定信息。"
 
 
 class ChatService:
@@ -25,11 +27,25 @@ class ChatService:
         self._preparing = set()
         self._requests = {}
         self._cancel_tombstones = {}
+        self._unresolved_saves = {}
+        self.last_metrics = None
+        try:
+            self.orchestrator = ConversationOrchestrator(
+                PersonaManager(settings.persona_config_dir)
+            )
+        except PersonaConfigError:
+            # 人格不可用只拒绝新生成，健康、历史和已完成重放仍可用。
+            self.orchestrator = None
 
     async def open(self, thread_id, model, content, request_id, cloud_consent=False, *, think=None):
         key = (thread_id, request_id)
         if key in self._requests:
             raise ApplicationError("CHAT_REQUEST_CONFLICT", "该请求正在执行，请勿重复发送", 409)
+        request_threads = {item[0] for item in self._requests}
+        slots = len(self._requests) + len(self._unresolved_saves.keys() - request_threads)
+        recovery = thread_id in self._unresolved_saves and thread_id not in request_threads
+        if slots >= 128 and not recovery:
+            raise ApplicationError("CHAT_CAPACITY_EXCEEDED", "聊天服务繁忙，请稍后重试", 503)
         control = StreamControl()
         if self._cancel_tombstones.get(key, 0) > time.monotonic():
             control.cancel()
@@ -101,7 +117,28 @@ class ChatService:
         self.manager.update_model_policies(self.registry.gpu_policies())
         return entry
 
+    def _compose(self, entry, thread_id, history, content, record):
+        runtime = entry.get("policy", {}).get("runtime", {})
+        prepared = self.orchestrator.build(
+            thread_id,
+            history,
+            content,
+            context_tokens=runtime.get("num_ctx", 4096),
+            output_tokens=runtime.get("num_predict", 512),
+        )
+        record["context_metrics"] = {
+            "model": entry["id"],
+            "versions": prepared.versions,
+            "estimated_prompt_tokens": prepared.estimated_prompt_tokens,
+            "estimation_method": prepared.estimation_method,
+            "dropped_messages": prepared.dropped_messages,
+            "context_tokens": prepared.context_tokens,
+            "reserved_output_tokens": prepared.reserved_output_tokens,
+        }
+        return prepared.messages
+
     async def _prepare(self, thread_id, model, content, request_id, cloud_consent, think, record):
+        await self._recover_save(thread_id)
         # 先只读校验请求身份并查找已完成结果：命中时不得查询Ollama、检查资源或启动生成。
         replay = await asyncio.to_thread(
             self.store.get_completed_run, thread_id, model, content, request_id
@@ -123,12 +160,18 @@ class ChatService:
             output.put_nowait({"type": "delta", "text": message["content"]})
             output.put_nowait({"type": "done", "message": message})
             return output
+        if self.orchestrator is None:
+            raise ApplicationError("PERSONA_UNAVAILABLE", "人格配置不可用，请检查已审核版本", 503)
         entry = await self._resolve(model)
         if entry["provider"] == "deepseek":
             self.registry.require_cloud(cloud_consent)
-        await asyncio.to_thread(self.store.get_thread, thread_id)
-        history = await asyncio.to_thread(self.store.get_messages, thread_id)
-        run = await asyncio.to_thread(self.store.begin_run, thread_id, model, content, request_id)
+
+        def prepare(history):
+            return history, self._compose(entry, thread_id, history, content, record)
+
+        run = await asyncio.to_thread(
+            self.store.begin_run, thread_id, model, content, request_id, prepare=prepare
+        )
         meta = {
             "type": "meta",
             "thread_id": thread_id,
@@ -145,28 +188,12 @@ class ChatService:
             output.put_nowait({"type": "delta", "text": message["content"]})
             output.put_nowait({"type": "done", "message": message})
             return output
+        history, messages = run["prepared"]
         if record["control"].requested:
-            await asyncio.to_thread(self.store.finish_run, run["run_id"], "", "interrupted")
+            await self._finish_run(thread_id, run["run_id"], "", "interrupted")
             output.put_nowait({"type": "error", "code": "CHAT_CANCELLED", "message": "生成已取消"})
             return output
 
-        # 初版采用有界的最近消息窗口；完整历史仍保留在SQLite，不发送客户端伪造历史。
-        prior = [
-            {"role": item["role"], "content": item["content"]}
-            for item in history
-            if item["status"] == "complete" and item["content"]
-        ]
-        selected, budget = [], 6000 - len(content)
-        for item in reversed(prior[-20:]):
-            if len(item["content"]) > budget:
-                break
-            selected.insert(0, item)
-            budget -= len(item["content"])
-        messages = [
-            {"role": "system", "content": SYSTEM_MESSAGE},
-            *selected,
-            {"role": "user", "content": content},
-        ]
         try:
             if entry["provider"] == "ollama":
                 kwargs = {"control": record["control"]}
@@ -188,6 +215,7 @@ class ChatService:
                     self.manager._admit()
                     entry = await self._resolve(fallback)
                     meta.update(model=entry["id"], fallback_reason=error.code)
+                    messages = self._compose(entry, thread_id, history, content, record)
                     upstream, worker = await self.manager.open_chat_stream(
                         entry["id"], messages, entry["required_mib"], **kwargs
                     )
@@ -197,10 +225,13 @@ class ChatService:
                 )
         except Exception:
             status = "interrupted" if record["control"].requested else "error"
-            await asyncio.to_thread(self.store.finish_run, run["run_id"], "", status)
+            await self._finish_run(thread_id, run["run_id"], "", status)
             raise
 
         record["producing"] = True
+        # 明确的输入摘录只是本会话临时数据，不由模型推断情绪或持久化人格。
+        topic = "".join(char for char in " ".join(content.split()) if ord(char) >= 32)[:120]
+        self.orchestrator.persona.dynamic.update(thread_id, topic=topic)
         task = asyncio.create_task(
             self._produce(
                 run["run_id"],
@@ -236,15 +267,14 @@ class ChatService:
                 result = None
             if failure or not result or result.get("done") is not True:
                 status = "interrupted" if record["control"].requested else "error"
-                await asyncio.to_thread(self.store.finish_run, run_id, "".join(fragments), status)
+                await self._finish_run(key[0], run_id, "".join(fragments), status)
                 await output.put(
                     failure
                     or {"type": "error", "code": "CHAT_FAILED", "message": "回复未完成，请重试"}
                 )
                 return
-            message = await asyncio.to_thread(
-                self.store.finish_run, run_id, result["response"], "complete", actual_model=model
-            )
+            message = await self._finish_run(key[0], run_id, result["response"], "complete", model)
+            self.last_metrics = {**record["context_metrics"], **result.get("stats", {})}
             await output.put({"type": "done", "message": message})
         except Exception:
             logger.error("chat_persistence_or_stream_failed")
@@ -259,12 +289,37 @@ class ChatService:
             if self._requests.get(key) is record:
                 self._requests.pop(key, None)
 
+    async def _finish_run(self, thread_id, run_id, content, status, actual_model=None):
+        pending = (run_id, content, status, actual_model)
+        self._unresolved_saves[thread_id] = pending
+        result = await asyncio.to_thread(
+            self.store.finish_run, run_id, content, status, actual_model=actual_model
+        )
+        if self._unresolved_saves.get(thread_id) is pending:
+            self._unresolved_saves.pop(thread_id, None)
+        return result
+
+    async def _recover_save(self, thread_id):
+        pending = self._unresolved_saves.get(thread_id)
+        if pending is not None:
+            await self._finish_run(thread_id, *pending)
+
     async def close(self):
         if self._preparing:
             await asyncio.gather(*tuple(self._preparing), return_exceptions=True)
         if self._runs:
             # 不取消上游线程，不在仍需保存消息时提前关闭数据库。
             await asyncio.gather(*tuple(self._runs), return_exceptions=True)
+        # 未能持久化的内容仅暂存于进程；重启时由存储层将残留任务标记为中断。
+        self._unresolved_saves.clear()
+        if self.orchestrator is not None:
+            self.orchestrator.persona.dynamic.clear()
+
+    def reset_dynamic(self, thread_id):
+        # 路由仅在数据库成功删除会话后调用；连同暂存回复一起释放。
+        self._unresolved_saves.pop(thread_id, None)
+        if self.orchestrator is not None:
+            self.orchestrator.persona.dynamic.reset(thread_id)
 
 
 async def read_events(queue):
