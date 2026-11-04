@@ -2,6 +2,10 @@
 
 日期按 Asia/Shanghai 记录。只写实际执行结果，不用计划替代命令。Phase 0 历史见 [进度记录](docs/progress.md)。
 
+## 合并前训练租约复审修复（2026-11-04）
+
+复审以异步替身重现两个竞态：首次预留尚未完成时其他请求可取得 reserved，首次请求失败可能清除已交付租约；等待状态时切换游戏模式，原申请可能仍返回成功。改为完成最后异步查询及游戏准入后才同步提交 reserved；失败仅回滚自身未提交的预留，外层恢复时再检查游戏与租约。状态暴露、取消、游戏切换、旧请求晚失败和落盘失败重启均有新增测试，独立复审未发现剩余确定性阻塞。完整 pytest 1034 项通过，GPU/Router 扩展 535 项、Ruff 检查和格式检查通过；未启动真实训练或游戏。Windows 与 WSL GPU Manager 不得同时控制同一个 Ollama。
+
 ## 全项目审查修复（2026-11-04）
 
 独立分支修复 Windows 实例锁、训练预留重试、聊天历史并发与落库失败恢复，以及旧前端逐次云端确认；无新依赖和 schema 变更。`.venv\Scripts\python.exe -B -m pytest -p no:cacheprovider -q --basetemp E:\NovaAILab\logs\review-fixes-full-20261104`：1005 passed；Ruff check、126 文件 format check、工程自检 5 项通过。`frontend` 的 `npm run test` 26 项通过，typecheck、lint、build 成功；Next 生产网关对替身上游的 34 项检查通过。游戏、27B、真实付费云端和手机浏览器未在本轮执行，角色质量仍待修复及独立验收。设计与升级限制见 [D021](docs/decisions.md)。

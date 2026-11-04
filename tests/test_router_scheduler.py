@@ -92,6 +92,228 @@ def manager_for(tmp_path, backend, **kwargs):
     )
 
 
+def test_training_retry_cannot_obtain_lease_before_status_failure(tmp_path):
+    async def scenario():
+        backend = SchedulerBackend()
+        manager = manager_for(tmp_path, backend)
+        await manager.start()
+        job = str(uuid4())
+        entered, release = asyncio.Event(), asyncio.Event()
+        original = manager.status
+        intercepted = False
+
+        async def delayed_status():
+            nonlocal intercepted
+            if (
+                not intercepted
+                and manager.training_lease
+                and manager.training_lease["state"] == "preparing"
+                and not manager._suspended
+            ):
+                intercepted = True
+                entered.set()
+                await release.wait()
+                raise RuntimeError("synthetic status failure")
+            return await original()
+
+        manager.status = delayed_status
+        first = asyncio.create_task(manager.claim_training(job, 8000))
+        try:
+            await asyncio.wait_for(entered.wait(), timeout=3)
+            visible = await original()
+            assert visible["training"]["state"] == "preparing"
+            with pytest.raises(ApplicationError) as caught:
+                await manager.claim_training(job, 8000)
+            assert caught.value.code == "TRAINING_PREPARING"
+            release.set()
+            with pytest.raises(RuntimeError, match="synthetic status failure"):
+                await complete(first)
+            assert manager.training_lease is None
+            assert (
+                json.loads(manager.state_path.read_text(encoding="utf-8"))["training_lease"] is None
+            )
+            recovered = await manager.claim_training(job, 8000)
+            assert recovered["training"]["state"] == "reserved"
+            await manager.release_training(recovered["training"]["lease"]["id"], stopped=True)
+        finally:
+            release.set()
+            await cleanup(manager, backend, first)
+
+    asyncio.run(scenario())
+
+
+def test_training_claim_rechecks_gaming_after_preparation_status_wait(tmp_path):
+    async def scenario():
+        backend = SchedulerBackend()
+        manager = manager_for(tmp_path, backend)
+        await manager.start()
+        entered, release = asyncio.Event(), asyncio.Event()
+        original = manager.status
+        intercepted = False
+
+        async def delayed_status():
+            nonlocal intercepted
+            if (
+                not intercepted
+                and manager.training_lease
+                and manager.training_lease["state"] == "preparing"
+                and not manager._suspended
+            ):
+                intercepted = True
+                entered.set()
+                await release.wait()
+            return await original()
+
+        manager.status = delayed_status
+        first = asyncio.create_task(manager.claim_training(str(uuid4()), 8000))
+        gaming = None
+        try:
+            await asyncio.wait_for(entered.wait(), timeout=3)
+            gaming = asyncio.create_task(manager.set_mode("GAMING"))
+            await asyncio.sleep(0)
+            assert manager.mode == "GAMING"
+            release.set()
+            with pytest.raises(ApplicationError) as caught:
+                await complete(first)
+            assert caught.value.code == "GPU_GAMING"
+            assert (await complete(gaming))["mode"] == "GAMING"
+            assert manager.training_lease is None
+        finally:
+            release.set()
+            await cleanup(manager, backend, *([first, gaming] if gaming else [first]))
+
+    asyncio.run(scenario())
+
+
+def test_late_request_failure_never_clears_new_training_lease(tmp_path, monkeypatch):
+    async def scenario():
+        backend = SchedulerBackend()
+        manager = manager_for(tmp_path, backend)
+        await manager.start()
+        job = str(uuid4())
+        entered, release = asyncio.Event(), asyncio.Event()
+        original_shield = asyncio.shield
+
+        def delayed_delivery(awaitable):
+            inner = original_shield(awaitable)
+
+            async def wait_for_delivery():
+                await inner
+                entered.set()
+                await release.wait()
+                raise RuntimeError("synthetic status failure")
+
+            return wait_for_delivery()
+
+        monkeypatch.setattr(asyncio, "shield", delayed_delivery)
+        first = asyncio.create_task(manager.claim_training(job, 8000))
+        second = None
+        try:
+            await asyncio.wait_for(entered.wait(), timeout=3)
+            monkeypatch.setattr(asyncio, "shield", original_shield)
+            recovered = await manager.claim_training(job, 8000)
+            await manager.release_training(recovered["training"]["lease"]["id"], stopped=True)
+            second = asyncio.create_task(manager.claim_training(str(uuid4()), 7000))
+            new_lease = (await complete(second))["training"]["lease"]["id"]
+            release.set()
+            with pytest.raises(RuntimeError, match="synthetic status failure"):
+                await complete(first)
+            assert manager.training_lease["id"] == new_lease
+            await manager.release_training(new_lease, stopped=True)
+        finally:
+            monkeypatch.setattr(asyncio, "shield", original_shield)
+            release.set()
+            await cleanup(manager, backend, *([first, second] if second else [first]))
+
+    asyncio.run(scenario())
+
+
+def test_training_claim_rechecks_gaming_after_shielded_prepare(tmp_path, monkeypatch):
+    async def scenario():
+        backend = SchedulerBackend()
+        manager = manager_for(tmp_path, backend)
+        await manager.start()
+        entered, release = asyncio.Event(), asyncio.Event()
+        original_shield = asyncio.shield
+        job = str(uuid4())
+
+        def delayed_delivery(awaitable):
+            inner = original_shield(awaitable)
+
+            async def wait_for_delivery():
+                result = await inner
+                entered.set()
+                await release.wait()
+                return result
+
+            return wait_for_delivery()
+
+        monkeypatch.setattr(asyncio, "shield", delayed_delivery)
+        first = asyncio.create_task(manager.claim_training(job, 8000))
+        try:
+            await asyncio.wait_for(entered.wait(), timeout=3)
+            monkeypatch.setattr(asyncio, "shield", original_shield)
+            lease_id = manager.training_lease["id"]
+            assert (await manager.set_mode("GAMING"))["mode"] == "GAMING"
+            release.set()
+            with pytest.raises(ApplicationError) as caught:
+                await complete(first)
+            assert caught.value.code == "GPU_GAMING"
+            # 已提交状态可能已被他人读取；不得自动释放。
+            assert manager.training_lease["id"] == lease_id
+            await manager.set_mode("AUTO")
+            recovered = await manager.claim_training(job, 8000)
+            assert recovered["training"]["lease"]["id"] == lease_id
+            await manager.release_training(lease_id, stopped=True)
+        finally:
+            monkeypatch.setattr(asyncio, "shield", original_shield)
+            release.set()
+            await cleanup(manager, backend, first)
+
+    asyncio.run(scenario())
+
+
+def test_release_persist_failure_restart_is_unknown(tmp_path):
+    async def scenario():
+        backend = SchedulerBackend()
+        first = manager_for(tmp_path, backend)
+        await first.start()
+        job = str(uuid4())
+        leased = await first.claim_training(job, 8000)
+        lease_id = leased["training"]["lease"]["id"]
+        original = first._persist
+
+        def failing_persist(*, uncertain=None):
+            first.mode = "GAMING"
+            first.fault = "STATE_WRITE_FAILED"
+            raise ApplicationError("GPU_STATE_FAILED", "synthetic failure", 503)
+
+        first._persist = failing_persist
+        try:
+            with pytest.raises(ApplicationError) as caught:
+                await first.release_training(lease_id, stopped=True)
+            assert caught.value.code == "GPU_STATE_FAILED"
+            assert first.training_lease is None
+            assert first.blocked
+        finally:
+            first._persist = original
+            await first.close()
+
+        resumed = manager_for(tmp_path, backend)
+        await resumed.start()
+        try:
+            assert resumed.training_lease["id"] == lease_id
+            assert resumed.training_lease["state"] == "unknown_after_restart"
+            with pytest.raises(ApplicationError) as caught:
+                await resumed.claim_training(job, 8000)
+            assert caught.value.code == "TRAINING_STATE_UNKNOWN"
+            await resumed.release_training(lease_id, stopped=True)
+        finally:
+            await resumed.close()
+
+    asyncio.run(scenario())
+
+
 async def complete(task):
     return await asyncio.wait_for(asyncio.shield(task), timeout=3)
 

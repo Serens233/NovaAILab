@@ -979,12 +979,13 @@ class GpuManager:
             return result
         self._admit()
         lease_id = str(uuid4())
-        self.training_lease = {
+        reservation = {
             "id": lease_id,
             "job_id": job_id,
             "required_mib": required_mib,
             "state": "preparing",
         }
+        self.training_lease = reservation
         try:
             self._persist()
         except ApplicationError:
@@ -1004,6 +1005,7 @@ class GpuManager:
             raise
 
         async def prepare():
+            committed = False
             try:
                 async with self._control:
                     self._admit(training_lease_id=lease_id)
@@ -1012,13 +1014,25 @@ class GpuManager:
                     memory = await self.backend.get_gpu_memory_usage()
                     self._admit(training_lease_id=lease_id)
                     self._check_gpu_memory(memory, [], "training", required_mib)
-                    self.training_lease["state"] = "reserved"
+                    result = await self.status()
+                    # 状态查询期间仍保持 preparing，避免状态接口或重试提前交付租约。
+                    self._admit(training_lease_id=lease_id)
+                    if self.training_lease is not reservation:
+                        raise ApplicationError(
+                            "TRAINING_LEASE_MISMATCH", "训练租约已发生变化，请重新申请", 409
+                        )
+                    # 此处开始没有 await；预留落盘后保守保留，支持取消后的同任务重试。
+                    reservation["state"] = "reserved"
                     self._persist()
-                    return await self.status()
+                    committed = True
+                    result["training"]["state"] = "reserved"
+                    result["training"]["lease"] = dict(reservation)
+                    return result
             except BaseException:
-                # 仅撤销尚未交付给训练程序的预留；故障/游戏来源保持不变。
-                self.training_lease = None
-                self._persist()
+                # 已提交的租约可能已被状态接口或重试读取，不能自动清除。
+                if not committed and self.training_lease is reservation:
+                    self.training_lease = None
+                    self._persist()
                 raise
 
         task = asyncio.create_task(prepare())
@@ -1030,7 +1044,12 @@ class GpuManager:
                 task.exception()
 
         task.add_done_callback(finished)
-        return await asyncio.shield(task)
+        result = await asyncio.shield(task)
+        # prepare 的返回与外层请求被唤醒之间也可能进入游戏或释放租约。
+        self._admit(training_lease_id=lease_id)
+        if not self.training_lease or self.training_lease["id"] != lease_id:
+            raise ApplicationError("TRAINING_LEASE_MISMATCH", "训练租约已发生变化，请重新申请", 409)
+        return result
 
     async def release_training(self, lease_id, *, stopped):
         """调用者确认已安全结束训练后才释放；游戏退出不自动续训。"""
