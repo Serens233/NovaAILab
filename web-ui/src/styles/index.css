@@ -1,0 +1,203 @@
+@import 'tailwindcss';
+@import './tokens.css';
+@import './animations.css';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * 把设计 Token 映射成 Tailwind 工具类（bg-surface、text-muted-foreground、rounded-panel、shadow-glow …）。
+ * 组件中只使用这些语义类，不直接写十六进制颜色。
+ */
+@theme inline {
+  --color-background: var(--nova-bg);
+  --color-foreground: var(--nova-fg);
+  --color-surface: var(--nova-surface);
+  --color-surface-strong: var(--nova-surface-strong);
+  --color-surface-sunken: var(--nova-surface-sunken);
+  --color-muted: var(--nova-muted);
+  --color-muted-foreground: var(--nova-muted-fg);
+  --color-primary: var(--nova-primary);
+  --color-primary-foreground: var(--nova-primary-fg);
+  --color-primary-soft: var(--nova-primary-soft);
+  --color-accent: var(--nova-accent);
+  --color-accent-foreground: var(--nova-accent-fg);
+  --color-star: var(--nova-star-blue);
+  --color-gold: var(--nova-gold);
+  --color-border: var(--nova-border);
+  --color-border-strong: var(--nova-border-strong);
+  --color-input: var(--nova-input);
+  --color-ring: var(--nova-ring);
+  --color-success: var(--nova-success);
+  --color-warning: var(--nova-warning);
+  --color-danger: var(--nova-danger);
+  --color-bubble-user: var(--nova-bubble-user);
+  --color-bubble-user-fg: var(--nova-bubble-user-fg);
+  --color-bubble-nova: var(--nova-bubble-nova);
+  --color-overlay: var(--nova-overlay);
+
+  --radius-sm: var(--nova-radius-sm);
+  --radius-md: var(--nova-radius-md);
+  --radius-lg: var(--nova-radius-lg);
+  --radius-xl: var(--nova-radius-xl);
+  --radius-panel: var(--nova-radius-panel);
+
+  --shadow-soft: var(--nova-shadow-soft);
+  --shadow-panel: var(--nova-shadow-panel);
+  --shadow-glow: var(--nova-shadow-glow);
+
+  --font-sans: var(--nova-font-sans);
+  --font-display: var(--nova-font-display);
+  --font-mono: var(--nova-font-mono);
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--nova-border);
+  }
+  html {
+    font-size: var(--nova-font-size-base);
+    -webkit-text-size-adjust: 100%;
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    margin: 0;
+    background: var(--nova-bg);
+    color: var(--nova-fg);
+    font-family: var(--nova-font-sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  :focus-visible {
+    outline: 2px solid var(--nova-ring);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--nova-primary) 28%, transparent);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--nova-scrollbar) transparent;
+  }
+}
+
+@layer components {
+  /* 半透明玻璃面板：Nova 的档案卡片 */
+  .nova-panel {
+    background: var(--nova-surface);
+    border: 1px solid var(--nova-border);
+    border-radius: var(--nova-radius-panel);
+    box-shadow: var(--nova-shadow-panel);
+    backdrop-filter: blur(14px) saturate(1.2);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  }
+  /* 细描边：仿设定图中的手账边框 */
+  .nova-frame {
+    position: relative;
+  }
+  .nova-frame::after {
+    content: '';
+    position: absolute;
+    inset: 5px;
+    border: 1px solid var(--nova-frame-line);
+    border-radius: calc(var(--nova-radius-panel) - 5px);
+    pointer-events: none;
+  }
+  .nova-gradient-text {
+    background: var(--nova-gradient-hair);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .nova-hair-gradient {
+    background: var(--nova-gradient-hair);
+  }
+
+  /* Markdown 正文 */
+  .nova-prose {
+    overflow-wrap: anywhere;
+  }
+  .nova-prose > * + * {
+    margin-top: 0.6em;
+  }
+  .nova-prose h1,
+  .nova-prose h2,
+  .nova-prose h3 {
+    font-weight: 700;
+    line-height: 1.35;
+    margin-top: 0.9em;
+  }
+  .nova-prose h1 {
+    font-size: 1.25em;
+  }
+  .nova-prose h2 {
+    font-size: 1.12em;
+  }
+  .nova-prose h3 {
+    font-size: 1.02em;
+  }
+  .nova-prose ul,
+  .nova-prose ol {
+    padding-left: 1.4em;
+  }
+  .nova-prose ul {
+    list-style: none;
+  }
+  .nova-prose ul > li {
+    position: relative;
+  }
+  .nova-prose ul > li::before {
+    content: '✦';
+    position: absolute;
+    left: -1.15em;
+    font-size: 0.7em;
+    top: 0.35em;
+    color: var(--nova-primary);
+  }
+  .nova-prose ol {
+    list-style: decimal;
+  }
+  .nova-prose li + li {
+    margin-top: 0.2em;
+  }
+  .nova-prose a {
+    color: var(--nova-link);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .nova-prose blockquote {
+    border-left: 3px solid var(--nova-accent);
+    padding: 0.2em 0 0.2em 0.9em;
+    color: var(--nova-muted-fg);
+    font-style: italic;
+  }
+  .nova-prose :not(pre) > code {
+    font-family: var(--nova-font-mono);
+    font-size: 0.88em;
+    padding: 0.1em 0.38em;
+    border-radius: 6px;
+    background: var(--nova-code-inline-bg);
+  }
+  .nova-prose table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92em;
+    display: block;
+    overflow-x: auto;
+  }
+  .nova-prose th,
+  .nova-prose td {
+    border: 1px solid var(--nova-border);
+    padding: 0.35em 0.6em;
+    text-align: left;
+  }
+  .nova-prose hr {
+    border: 0;
+    border-top: 1px dashed var(--nova-border-strong);
+  }
+}
